@@ -21,7 +21,7 @@ app.use(express.urlencoded({ extended: true }));
 const upload = multer();
 
 // URL do webhook de entrada do n8n
-const N8N_WEBHOOK_INPUT_URL = process.env.N8N_WEBHOOK_INPUT_URL || 'https://wgatech.app.n8n.cloud/webhook-test/20369a72-f180-421f-8048-9ff66c9deb13';
+const N8N_WEBHOOK_INPUT_URL = process.env.N8N_WEBHOOK_INPUT_URL || 'https://wgatech.app.n8n.cloud/webhook/219cc658-bea9-4cb9-b463-9ead6f8cdc21';
 
 // Endpoint PROXY para enviar documentos ao n8n (resolve problema de CORS)
 app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
