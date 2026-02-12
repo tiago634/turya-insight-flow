@@ -209,4 +209,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`📡 Webhook de saída: http://0.0.0.0:${PORT}/webhook/result`);
   console.log(`🔍 Status check: http://0.0.0.0:${PORT}/api/analysis/:sessionId`);
   console.log(`🌐 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 URL do n8n configurada: ${N8N_WEBHOOK_INPUT_URL}`);
+  console.log(`⚠️  Verifique se a URL está correta (deve ser /webhook/ e não /webhook-test/)`);
 });
