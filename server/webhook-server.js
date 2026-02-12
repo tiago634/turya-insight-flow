@@ -50,30 +50,45 @@ app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
     
     console.log('📤 Enviando para n8n:', N8N_WEBHOOK_INPUT_URL);
     
-    // IMPORTANTE: Retornar sucesso IMEDIATAMENTE após iniciar o envio
-    // O n8n processará em background e enviará o resultado via webhook de saída
-    // Não esperamos a resposta completa para evitar timeout (524)
-    
-    // Enviar para o n8n sem aguardar resposta completa (fire-and-forget)
-    fetch(N8N_WEBHOOK_INPUT_URL, {
-      method: 'POST',
-      body: formData,
-      headers: formData.getHeaders()
-    })
-    .then(response => {
-      console.log('📥 Resposta do n8n (background):', response.status);
-      if (!response.ok) {
-        console.error('⚠️ n8n retornou status:', response.status);
-        // Não lançamos erro aqui porque já retornamos sucesso ao cliente
-      }
-    })
-    .catch(error => {
-      console.error('⚠️ Erro ao enviar para n8n (background):', error.message);
-      // Não lançamos erro aqui porque já retornamos sucesso ao cliente
-    });
-    
-    // Retornar sucesso IMEDIATAMENTE (não esperar processamento do n8n)
-    // O frontend já está fazendo polling para verificar quando o resultado está pronto
+    // Esperar o n8n ACEITAR o request (até 15s) antes de devolver sucesso ao site.
+    // Assim os documentos realmente entram no fluxo. O resultado virá depois via webhook de saída + polling.
+    const N8N_ACCEPT_TIMEOUT_MS = 15000; // 15 segundos
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), N8N_ACCEPT_TIMEOUT_MS);
+
+    let response;
+    try {
+      response = await fetch(N8N_WEBHOOK_INPUT_URL, {
+        method: 'POST',
+        body: formData,
+        headers: formData.getHeaders(),
+        signal: controller.signal
+      });
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      const isTimeout = fetchError.name === 'AbortError';
+      console.error(isTimeout ? '⚠️ Timeout aguardando n8n (15s) - documentos podem não ter entrado no fluxo' : '⚠️ Erro ao enviar para n8n:', fetchError.message);
+      return res.status(504).json({
+        error: isTimeout
+          ? 'O n8n demorou para responder. Tente novamente ou verifique se o fluxo está ativo.'
+          : `Erro ao enviar para n8n: ${fetchError.message}`
+      });
+    }
+
+    clearTimeout(timeoutId);
+
+    console.log('📥 Resposta do n8n:', response.status, response.status === 200 ? '- documentos recebidos pelo fluxo' : '- verifique o fluxo no n8n');
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('⚠️ n8n retornou:', response.status, errText);
+      return res.status(502).json({
+        error: `n8n retornou ${response.status}. Os documentos podem não ter entrado no fluxo.`,
+        details: errText.slice(0, 500)
+      });
+    }
+
+    // n8n aceitou; o fluxo vai rodar e enviar o resultado para /webhook/result. O site faz polling.
     res.json({
       success: true,
       message: 'Documentos enviados para análise com sucesso. Processando em background...'
@@ -90,10 +105,11 @@ app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
 // Endpoint para receber resultado do n8n (webhook de saída)
 app.post('/webhook/result', upload.any(), async (req, res) => {
   try {
-    console.log('📥 Recebendo resultado do n8n...');
-    console.log('Headers:', req.headers);
-    console.log('Body:', req.body);
-    console.log('Files:', req.files);
+    console.log('📥 ========== RECEBENDO RESULTADO DO N8N ==========');
+    console.log('📥 Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('📥 Body completo:', JSON.stringify(req.body, null, 2));
+    console.log('📥 Files:', req.files ? req.files.map(f => ({ name: f.originalname, size: f.size })) : 'Nenhum arquivo');
+    console.log('📥 Content-Type:', req.headers['content-type']);
 
     let sessionId = null;
     let htmlContent = null;
@@ -143,10 +159,13 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
     }
 
     if (!sessionId) {
-      console.error('❌ session_id não encontrado');
+      console.error('❌ session_id não encontrado no resultado do n8n');
+      console.error('❌ Body keys:', Object.keys(req.body || {}));
+      console.error('❌ Body completo:', JSON.stringify(req.body, null, 2));
       return res.status(400).json({ 
         error: 'session_id é obrigatório',
-        received: Object.keys(req.body || {})
+        received: Object.keys(req.body || {}),
+        hint: 'Certifique-se de que o n8n está enviando o session_id no corpo da requisição'
       });
     }
 
@@ -188,12 +207,16 @@ app.get('/api/analysis/:sessionId', (req, res) => {
   const result = analysisResults.get(sessionId);
 
   if (!result) {
+    console.log(`🔍 Polling: session_id ${sessionId} ainda não recebeu resultado do n8n`);
+    console.log(`🔍 Total de resultados armazenados: ${analysisResults.size}`);
+    console.log(`🔍 Session IDs armazenados:`, Array.from(analysisResults.keys()));
     return res.json({ 
       status: 'processing', 
       session_id: sessionId 
     });
   }
 
+  console.log(`✅ Polling: resultado encontrado para session_id ${sessionId}`);
   res.json(result);
 });
 
