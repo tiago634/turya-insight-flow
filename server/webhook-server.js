@@ -4,6 +4,8 @@
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
+const FormData = require('form-data');
+const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -17,6 +19,64 @@ app.use(express.urlencoded({ extended: true }));
 
 // Configurar multer para FormData
 const upload = multer();
+
+// URL do webhook de entrada do n8n
+const N8N_WEBHOOK_INPUT_URL = process.env.N8N_WEBHOOK_INPUT_URL || 'https://wgatech.app.n8n.cloud/webhook-test/20369a72-f180-421f-8048-9ff66c9deb13';
+
+// Endpoint PROXY para enviar documentos ao n8n (resolve problema de CORS)
+app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
+  try {
+    console.log('📤 Recebendo documentos do frontend para enviar ao n8n...');
+    
+    // Criar FormData para encaminhar ao n8n
+    const formData = new FormData();
+    
+    // Copiar todos os campos do FormData recebido
+    if (req.body) {
+      Object.keys(req.body).forEach(key => {
+        formData.append(key, req.body[key]);
+      });
+    }
+    
+    // Copiar todos os arquivos
+    if (req.files && req.files.length > 0) {
+      req.files.forEach(file => {
+        formData.append(file.fieldname, file.buffer, {
+          filename: file.originalname,
+          contentType: file.mimetype
+        });
+      });
+    }
+    
+    console.log('📤 Enviando para n8n:', N8N_WEBHOOK_INPUT_URL);
+    
+    // Encaminhar para o n8n
+    const response = await fetch(N8N_WEBHOOK_INPUT_URL, {
+      method: 'POST',
+      body: formData,
+      headers: formData.getHeaders()
+    });
+    
+    console.log('📥 Resposta do n8n:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`n8n retornou status ${response.status}: ${errorText}`);
+    }
+    
+    // Retornar resposta de sucesso
+    res.json({
+      success: true,
+      message: 'Documentos enviados para análise com sucesso'
+    });
+    
+  } catch (error) {
+    console.error('❌ Erro ao enviar para n8n:', error);
+    res.status(500).json({
+      error: error.message || 'Erro ao enviar documentos para análise'
+    });
+  }
+});
 
 // Endpoint para receber resultado do n8n (webhook de saída)
 app.post('/webhook/result', upload.any(), async (req, res) => {

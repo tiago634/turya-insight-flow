@@ -20,10 +20,12 @@ interface UploadZoneProps {
 const MAX_FILES = 10;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_TYPES = ["application/pdf"];
-// URL do webhook de ENTRADA do n8n (direto)
-const WEBHOOK_INPUT_URL = import.meta.env.VITE_N8N_WEBHOOK_INPUT_URL || "https://wgatech.app.n8n.cloud/webhook-test/20369a72-f180-421f-8048-9ff66c9deb13";
-// URL do servidor local para receber webhook de saída (se usar fluxo assíncrono)
-const WEBHOOK_OUTPUT_URL = import.meta.env.VITE_WEBHOOK_SERVER_URL || "http://localhost:3001/webhook/result";
+// URL do servidor webhook (Railway) - usa proxy para evitar CORS
+const WEBHOOK_SERVER_URL = import.meta.env.VITE_WEBHOOK_SERVER_URL || "http://localhost:3001";
+// Endpoint proxy para enviar documentos ao n8n (via servidor webhook)
+const WEBHOOK_INPUT_URL = `${WEBHOOK_SERVER_URL}/api/send-to-n8n`;
+// URL do servidor para receber webhook de saída (se usar fluxo assíncrono)
+const WEBHOOK_OUTPUT_URL = `${WEBHOOK_SERVER_URL}/webhook/result`;
 const TIMEOUT_MS = 10 * 60 * 1000; // 10 minutos (n8n pode demorar para processar)
 
 const UploadZone = ({ onSuccess, onError, onStartProcessing, sessionId }: UploadZoneProps) => {
