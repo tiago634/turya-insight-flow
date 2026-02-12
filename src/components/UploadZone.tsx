@@ -236,7 +236,7 @@ const UploadZone = ({ onSuccess, onError, onStartProcessing, sessionId }: Upload
   };
 
   return (
-    <section id="upload-section" className="py-16">
+    <section id="upload" className="py-16">
       <div className="container mx-auto px-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

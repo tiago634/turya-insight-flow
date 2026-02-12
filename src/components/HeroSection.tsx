@@ -61,7 +61,20 @@ const HeroSection = () => {
           >
             <a
               href="#upload"
-              className="btn-turya inline-flex items-center gap-3 text-foreground"
+              onClick={(e) => {
+                e.preventDefault();
+                const element = document.getElementById('upload');
+                if (element) {
+                  const headerOffset = 100;
+                  const elementPosition = element.getBoundingClientRect().top;
+                  const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+                  window.scrollTo({
+                    top: offsetPosition,
+                    behavior: 'smooth'
+                  });
+                }
+              }}
+              className="btn-turya inline-flex items-center gap-3 text-foreground cursor-pointer"
             >
               Começar Análise
               <ArrowDown className="w-5 h-5" />
