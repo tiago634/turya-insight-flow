@@ -5,7 +5,7 @@ const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const FormData = require('form-data');
-const fetch = require('node-fetch');
+// Node.js 18+ tem fetch nativo, não precisa de node-fetch
 const app = express();
 const PORT = process.env.PORT || 3001;
 
