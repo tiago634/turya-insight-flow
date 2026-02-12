@@ -50,24 +50,33 @@ app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
     
     console.log('📤 Enviando para n8n:', N8N_WEBHOOK_INPUT_URL);
     
-    // Encaminhar para o n8n
-    const response = await fetch(N8N_WEBHOOK_INPUT_URL, {
+    // IMPORTANTE: Retornar sucesso IMEDIATAMENTE após iniciar o envio
+    // O n8n processará em background e enviará o resultado via webhook de saída
+    // Não esperamos a resposta completa para evitar timeout (524)
+    
+    // Enviar para o n8n sem aguardar resposta completa (fire-and-forget)
+    fetch(N8N_WEBHOOK_INPUT_URL, {
       method: 'POST',
       body: formData,
       headers: formData.getHeaders()
+    })
+    .then(response => {
+      console.log('📥 Resposta do n8n (background):', response.status);
+      if (!response.ok) {
+        console.error('⚠️ n8n retornou status:', response.status);
+        // Não lançamos erro aqui porque já retornamos sucesso ao cliente
+      }
+    })
+    .catch(error => {
+      console.error('⚠️ Erro ao enviar para n8n (background):', error.message);
+      // Não lançamos erro aqui porque já retornamos sucesso ao cliente
     });
     
-    console.log('📥 Resposta do n8n:', response.status);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`n8n retornou status ${response.status}: ${errorText}`);
-    }
-    
-    // Retornar resposta de sucesso
+    // Retornar sucesso IMEDIATAMENTE (não esperar processamento do n8n)
+    // O frontend já está fazendo polling para verificar quando o resultado está pronto
     res.json({
       success: true,
-      message: 'Documentos enviados para análise com sucesso'
+      message: 'Documentos enviados para análise com sucesso. Processando em background...'
     });
     
   } catch (error) {

@@ -195,13 +195,17 @@ const UploadZone = ({ onSuccess, onError, onStartProcessing, sessionId }: Upload
         const result = await response.json();
         console.log("Resposta JSON recebida:", result);
 
-        // Se a resposta indica que o processamento foi iniciado mas não está completo
+        // Se a resposta indica sucesso (processamento iniciado em background)
         // O loading já foi iniciado acima, então apenas continuar (polling já está ativo)
-        if (!(result.status === "processing" || result.message || result.success)) {
-          // Se já veio completo (improvável, mas possível)
-          throw new Error("Formato de resposta inesperado do servidor");
+        if (result.success || result.message) {
+          console.log("✅ Processamento iniciado. Aguardando resultado via polling...");
+          // Não fazer nada - o polling no Index.tsx já está ativo e vai buscar o resultado
+          return;
         }
-        // Se for assíncrono, o polling no Index já está ativo, então não fazer nada
+        
+        // Se não reconhecer o formato, continuar com polling mesmo assim
+        console.log("⚠️ Formato de resposta não reconhecido, mas continuando com polling...");
+        // O polling no Index já está ativo, então não fazer nada
       } catch (jsonError) {
         // Se não conseguir fazer parse como JSON, pode ser que seja HTML mesmo
         console.warn("Não foi possível fazer parse como JSON, tentando como HTML...");
