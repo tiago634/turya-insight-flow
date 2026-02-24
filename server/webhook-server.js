@@ -60,11 +60,12 @@ app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
       return res.status(500).json({ error: 'Falha ao montar os arquivos para envio.' });
     }
     
-    console.log('📤 Enviando para n8n (multipart,', bodyBuffer.length, 'bytes,', req.files?.length || 0, 'arquivos):', N8N_WEBHOOK_INPUT_URL);
+    const sessionId = req.body?.session_id || null;
+    console.log('📤 Enviando para n8n (multipart,', bodyBuffer.length, 'bytes,', req.files?.length || 0, 'arquivos), session_id:', sessionId);
     
     // Não esperar a resposta do n8n: o fluxo pode levar vários minutos (ex.: 4–5 min).
-    // Retornamos sucesso na hora; o n8n processa em background e envia o resultado para /webhook/result.
-    // O frontend já faz polling e mostra o resultado quando chegar.
+    // Retornamos sucesso na hora. Quando o n8n responder (Respond to Webhook), lemos o HTML em background
+    // e gravamos em analysisResults para o polling do frontend encontrar.
     fetch(N8N_WEBHOOK_INPUT_URL, {
       method: 'POST',
       body: bodyBuffer,
@@ -73,15 +74,45 @@ app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
         'Content-Length': String(bodyBuffer.length)
       }
     })
-      .then((response) => {
+      .then(async (response) => {
         console.log('📥 Resposta do n8n (background):', response.status);
         if (!response.ok) {
-          response.text().then((t) => console.error('⚠️ n8n retornou:', response.status, t?.slice(0, 300)));
+          const t = await response.text();
+          console.error('⚠️ n8n retornou:', response.status, t?.slice(0, 300));
+          if (sessionId) {
+            analysisResults.set(sessionId, { session_id: sessionId, status: 'error', error: `n8n retornou ${response.status}` });
+          }
+          return;
+        }
+        const contentType = response.headers.get('content-type') || '';
+        if (sessionId && (contentType.includes('text/html') || contentType.includes('application/octet-stream'))) {
+          const buf = await response.arrayBuffer();
+          const base64 = Buffer.from(buf).toString('base64');
+          analysisResults.set(sessionId, {
+            session_id: sessionId,
+            html_content: base64,
+            status: 'completed',
+            received_at: new Date().toISOString()
+          });
+          console.log('✅ Resultado gravado para session_id:', sessionId, '(Respond to Webhook)');
+        } else if (sessionId) {
+          const text = await response.text();
+          if (text && text.length < 5000) {
+            try {
+              const json = JSON.parse(text);
+              if (json.session_id) analysisResults.set(json.session_id, { ...json, received_at: new Date().toISOString() });
+            } catch (_) {}
+          }
         }
       })
-      .catch((err) => console.error('⚠️ Erro ao enviar para n8n (background):', err.message));
+      .catch((err) => {
+        console.error('⚠️ Erro ao enviar para n8n (background):', err.message);
+        if (sessionId) {
+          analysisResults.set(sessionId, { session_id: sessionId, status: 'error', error: err.message });
+        }
+      });
 
-    // Resposta imediata: fluxo em processamento; resultado virá via /webhook/result e o site faz polling.
+    // Resposta imediata: fluxo em processamento; quando n8n responder, o polling encontra o resultado.
     res.json({
       success: true,
       message: 'Documentos enviados para análise. O processamento pode levar alguns minutos; aguarde na tela de carregamento.'
