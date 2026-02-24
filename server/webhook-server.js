@@ -23,16 +23,6 @@ const upload = multer();
 // URL do webhook de entrada do n8n
 const N8N_WEBHOOK_INPUT_URL = process.env.N8N_WEBHOOK_INPUT_URL || 'https://wgatech.app.n8n.cloud/webhook/219cc658-bea9-4cb9-b463-9ead6f8cdc21';
 
-// Ler stream do form-data para Buffer (fetch do Node não envia o stream do pacote form-data corretamente)
-function formDataToBuffer(formData) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    formData.on('data', (chunk) => chunks.push(chunk));
-    formData.on('end', () => resolve(Buffer.concat(chunks)));
-    formData.on('error', reject);
-  });
-}
-
 // Endpoint PROXY para enviar documentos ao n8n (resolve problema de CORS)
 // Enviamos multipart/form-data: arquivos como binário (sem base64), campos como form fields.
 app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
@@ -57,8 +47,20 @@ app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
     }
     
     const headers = formData.getHeaders();
-    const bodyBuffer = await formDataToBuffer(formData);
-    console.log('📤 Enviando para n8n (multipart,', bodyBuffer.length, 'bytes):', N8N_WEBHOOK_INPUT_URL);
+    let bodyBuffer;
+    try {
+      bodyBuffer = formData.getBuffer();
+    } catch (bufErr) {
+      console.error('❌ Erro ao montar multipart:', bufErr.message);
+      return res.status(500).json({ error: 'Erro ao preparar envio dos arquivos.' });
+    }
+    
+    if (!bodyBuffer || bodyBuffer.length < 50) {
+      console.error('❌ Multipart muito pequeno:', bodyBuffer?.length, '- req.files:', req.files?.length, 'req.body keys:', req.body ? Object.keys(req.body) : []);
+      return res.status(500).json({ error: 'Falha ao montar os arquivos para envio.' });
+    }
+    
+    console.log('📤 Enviando para n8n (multipart,', bodyBuffer.length, 'bytes,', req.files?.length || 0, 'arquivos):', N8N_WEBHOOK_INPUT_URL);
     
     const N8N_ACCEPT_TIMEOUT_MS = 15000;
     const controller = new AbortController();
