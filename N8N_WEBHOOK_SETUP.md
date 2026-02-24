@@ -82,22 +82,15 @@ N8N_WEBHOOK_INPUT_URL=https://wgatech.app.n8n.cloud/webhook/20369a72-f180-421f-8
 
 ## 2. Webhook de Saída (n8n envia resultado)
 
-### Opção A: Respond to Webhook (Resposta Síncrona)
+### Opção A: Respond to Webhook (só para fluxos curtos)
 
-Se você usar o nó **"Respond to Webhook"** no final do fluxo:
-- O n8n responderá diretamente à requisição HTTP original
-- Configure os headers no nó "Respond to Webhook":
-  - `Content-Disposition: attachment; filename="Analise_DO.html"`
-  - `Access-Control-Allow-Origin: *` (ou seu domínio específico)
-- O frontend aguardará a resposta diretamente (timeout de 10 minutos)
-- **Vantagem**: Mais simples, não precisa de servidor webhook separado
-- **Desvantagem**: O usuário precisa manter a conexão aberta durante o processamento
+Se o fluxo termina em **menos de ~1–2 minutos**, o nó **"Respond to Webhook"** pode funcionar: o Railway recebe o HTML na mesma conexão e o site mostra o resultado.
 
-### Opção B: Webhook de Saída Separado (Resposta Assíncrona)
+**⚠️ Fluxos longos (ex.: 4–5 min):** O Cloudflare (na frente do n8n) faz timeout (~100 s) e devolve **524**. A conexão fecha antes do fluxo terminar, então o "Respond to Webhook" **não entrega** o resultado ao Railway. Para fluxos longos, use **sempre a Opção B** abaixo.
 
-Se você quiser usar um webhook de saída separado:
+### Opção B: HTTP Request para /webhook/result (recomendado para fluxos longos)
 
-No final do seu fluxo, adicione um nó **HTTP Request** para enviar o resultado:
+**Obrigatório** quando o fluxo demora mais que ~2 minutos. No **final** do fluxo, adicione um nó **HTTP Request** para enviar o resultado:
 
 1. **Método**: POST
 2. **URL**: Use a variável `webhook_output_url` recebida no webhook de entrada

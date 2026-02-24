@@ -79,8 +79,13 @@ app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
         if (!response.ok) {
           const t = await response.text();
           console.error('⚠️ n8n retornou:', response.status, t?.slice(0, 300));
-          if (sessionId) {
+          // 524 (Cloudflare timeout) e 504: não gravar como erro – o fluxo pode ainda estar rodando
+          // e enviar o resultado via POST /webhook/result quando terminar. Frontend continua em polling.
+          const isTimeout = response.status === 524 || response.status === 504;
+          if (sessionId && !isTimeout) {
             analysisResults.set(sessionId, { session_id: sessionId, status: 'error', error: `n8n retornou ${response.status}` });
+          } else if (sessionId && isTimeout) {
+            console.log('⏳ Timeout na conexão (524/504); aguardando resultado via /webhook/result se o fluxo enviar.');
           }
           return;
         }
