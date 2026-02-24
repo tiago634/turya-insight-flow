@@ -24,31 +24,23 @@ const upload = multer();
 const N8N_WEBHOOK_INPUT_URL = process.env.N8N_WEBHOOK_INPUT_URL || 'https://wgatech.app.n8n.cloud/webhook/219cc658-bea9-4cb9-b463-9ead6f8cdc21';
 
 // Endpoint PROXY para enviar documentos ao n8n (resolve problema de CORS)
+// Enviamos como JSON para o n8n preencher body (multipart no n8n cloud às vezes deixa body vazio)
 app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
   try {
     console.log('📤 Recebendo documentos do frontend para enviar ao n8n...');
     
-    // Criar FormData para encaminhar ao n8n
-    const formData = new FormData();
+    const payload = { ...req.body };
     
-    // Copiar todos os campos do FormData recebido
-    if (req.body) {
-      Object.keys(req.body).forEach(key => {
-        formData.append(key, req.body[key]);
-      });
-    }
-    
-    // Copiar todos os arquivos
+    // Incluir arquivos em base64 para o body do n8n vir preenchido
     if (req.files && req.files.length > 0) {
-      req.files.forEach(file => {
-        formData.append(file.fieldname, file.buffer, {
-          filename: file.originalname,
-          contentType: file.mimetype
-        });
+      req.files.forEach((file, i) => {
+        payload[file.fieldname] = file.buffer.toString('base64');
+        payload[`${file.fieldname}_filename`] = file.originalname;
+        payload[`${file.fieldname}_mimetype`] = file.mimetype;
       });
     }
     
-    console.log('📤 Enviando para n8n:', N8N_WEBHOOK_INPUT_URL);
+    console.log('📤 Enviando para n8n (JSON):', N8N_WEBHOOK_INPUT_URL);
     
     // Esperar o n8n ACEITAR o request (até 15s) antes de devolver sucesso ao site.
     // Assim os documentos realmente entram no fluxo. O resultado virá depois via webhook de saída + polling.
@@ -60,8 +52,8 @@ app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
     try {
       response = await fetch(N8N_WEBHOOK_INPUT_URL, {
         method: 'POST',
-        body: formData,
-        headers: formData.getHeaders(),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
         signal: controller.signal
       });
     } catch (fetchError) {

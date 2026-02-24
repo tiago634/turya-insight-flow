@@ -34,26 +34,53 @@ Este documento explica como configurar os webhooks do n8n para integrar com o si
 
 ### Dados Recebidos
 
-O webhook receberá um `FormData` com os seguintes campos:
+O webhook recebe **JSON** (body preenchido) com os campos:
 
 - `session_id`: UUID único da sessão (obrigatório)
-- `arquivo_0`, `arquivo_1`, ...: Arquivos PDF enviados
-- `quantidade_arquivos`: Número total de arquivos
-- `timestamp`: Data/hora do envio (ISO 8601)
-- `webhook_output_url`: URL do servidor webhook onde o n8n deve enviar o resultado
+- `webhook_output_url`: URL onde o n8n deve enviar o resultado
+- `timestamp`, `quantidade_arquivos`: metadados
+- `arquivo_0`, `arquivo_1`, ...: conteúdo dos PDFs em **base64**
+- `arquivo_0_filename`, `arquivo_0_mimetype`, ...: nome e tipo de cada arquivo
 
-### Exemplo de URL do Webhook de Entrada
+No nó Webhook, use por exemplo: `{{ $json.body.session_id }}`, `{{ $json.body.webhook_output_url }}`. Se o fluxo precisar dos arquivos em binário, use um nó Code para converter base64 em binary.
 
-```
-https://wgatech.app.n8n.cloud/webhook-test/20369a72-f180-421f-8048-9ff66c9deb13
-```
+### Exemplo de URLs do Webhook de Entrada
+
+**⚠️ IMPORTANTE**: Existem dois tipos de URLs:
+
+1. **URL de TESTE** (só funciona quando você clica em "Execute workflow"):
+   ```
+   https://wgatech.app.n8n.cloud/webhook-test/20369a72-f180-421f-8048-9ff66c9deb13
+   ```
+   - Contém `/webhook-test/` no caminho
+   - Só funciona uma vez após clicar em "Execute workflow"
+   - ❌ NÃO use em produção!
+
+2. **URL de PRODUÇÃO** (funciona sempre quando o workflow está ativado):
+   ```
+   https://wgatech.app.n8n.cloud/webhook/20369a72-f180-421f-8048-9ff66c9deb13
+   ```
+   - Contém `/webhook/` (sem `-test`)
+   - Funciona continuamente quando o workflow está ativado
+   - ✅ Use esta em produção!
+
+### Como Obter a URL de Produção
+
+1. No n8n, abra seu workflow
+2. Clique no botão **"Active"** (ou "Ativar") para ativar o workflow
+3. Clique no nó Webhook de entrada
+4. Copie a URL que aparece (deve ser `/webhook/` e não `/webhook-test/`)
 
 ### Configuração no Código
 
-Atualize a variável de ambiente no arquivo `.env`:
-
+**Para desenvolvimento local** (arquivo `.env`):
 ```env
 VITE_N8N_WEBHOOK_INPUT_URL=https://wgatech.app.n8n.cloud/webhook-test/20369a72-f180-421f-8048-9ff66c9deb13
+```
+
+**Para produção** (Railway - variável `N8N_WEBHOOK_INPUT_URL`):
+```env
+N8N_WEBHOOK_INPUT_URL=https://wgatech.app.n8n.cloud/webhook/20369a72-f180-421f-8048-9ff66c9deb13
 ```
 
 ## 2. Webhook de Saída (n8n envia resultado)
@@ -248,6 +275,48 @@ npm run dev
 ⚠️ **CRÍTICO**: O `session_id` recebido no webhook de entrada **DEVE** ser preservado durante todo o fluxo do n8n e enviado de volta no webhook de saída. Sem isso, o frontend não conseguirá associar o resultado à sessão correta.
 
 ## 8. Troubleshooting
+
+### O fluxo só chega no nó Webhook e para
+
+Se o fluxo executa só até o nó **Webhook** e não continua para os próximos nós:
+
+1. **Ver a saída do Webhook**
+   - No n8n, após uma execução, clique no nó **Webhook** e abra a saída (Output).
+   - Com **multipart/form-data**, os campos costumam vir em **body** (ex.: `body.session_id`, `body.webhook_output_url`).
+   - Os arquivos vêm em **binary** (ex.: `data.arquivo_0`).
+
+2. **Ajustar o próximo nó**
+   - O nó logo após o Webhook precisa usar os dados da saída do Webhook.
+   - Use expressões como:
+     - `{{ $json.body.session_id }}` ou `{{ $json.session_id }}`
+     - `{{ $json.body.webhook_output_url }}` ou `{{ $json.webhook_output_url }}`
+   - Se o próximo nó esperar um único item e o Webhook devolver vários (ou vice-versa), use um nó **Code** ou **Set** para montar um único item com os campos certos.
+
+3. **Não usar “Respond to Webhook” no primeiro nó**
+   - Se o nó Webhook de **entrada** estiver com “Respond to Webhook” e for o único a responder, o fluxo pode ser encerrado ali.
+   - Para fluxo assíncrono (processar e depois enviar para o Railway), o Webhook de entrada deve **apenas** receber os dados e passar para o próximo nó, **sem** “Respond to Webhook” nesse nó.
+
+4. **Conexão entre nós**
+   - Confirme que há uma conexão (seta) do nó **Webhook** para o próximo nó.
+   - Confirme que não há filtro/condição que impeça a execução de seguir.
+
+5. **Exemplo de nó Code logo após o Webhook**
+   - Para normalizar a saída do Webhook e garantir um item com os campos certos para o resto do fluxo:
+   ```javascript
+   const body = $input.item.json.body || $input.item.json;
+   const sessionId = body.session_id || $input.item.json.session_id;
+   const webhookOutputUrl = body.webhook_output_url || $input.item.json.webhook_output_url;
+   return {
+     json: {
+       session_id: sessionId,
+       webhook_output_url: webhookOutputUrl,
+       timestamp: body.timestamp,
+       quantidade_arquivos: body.quantidade_arquivos
+     },
+     binary: $input.item.binary
+   };
+   ```
+   - Assim, os nós seguintes podem usar `$json.session_id` e `$json.webhook_output_url` sem se preocupar com `body`.
 
 ### O site não recebe o resultado
 
