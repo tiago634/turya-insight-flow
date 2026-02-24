@@ -24,27 +24,31 @@ const upload = multer();
 const N8N_WEBHOOK_INPUT_URL = process.env.N8N_WEBHOOK_INPUT_URL || 'https://wgatech.app.n8n.cloud/webhook/219cc658-bea9-4cb9-b463-9ead6f8cdc21';
 
 // Endpoint PROXY para enviar documentos ao n8n (resolve problema de CORS)
-// Enviamos como JSON para o n8n preencher body (multipart no n8n cloud às vezes deixa body vazio)
+// Enviamos multipart/form-data: arquivos como binário (sem base64), campos como form fields.
 app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
   try {
     console.log('📤 Recebendo documentos do frontend para enviar ao n8n...');
     
-    const payload = { ...req.body };
+    const formData = new FormData();
     
-    // Incluir arquivos em base64 para o body do n8n vir preenchido
-    if (req.files && req.files.length > 0) {
-      req.files.forEach((file, i) => {
-        payload[file.fieldname] = file.buffer.toString('base64');
-        payload[`${file.fieldname}_filename`] = file.originalname;
-        payload[`${file.fieldname}_mimetype`] = file.mimetype;
+    if (req.body) {
+      Object.keys(req.body).forEach(key => {
+        formData.append(key, req.body[key]);
       });
     }
     
-    console.log('📤 Enviando para n8n (JSON):', N8N_WEBHOOK_INPUT_URL);
+    if (req.files && req.files.length > 0) {
+      req.files.forEach(file => {
+        formData.append(file.fieldname, file.buffer, {
+          filename: file.originalname,
+          contentType: file.mimetype
+        });
+      });
+    }
     
-    // Esperar o n8n ACEITAR o request (até 15s) antes de devolver sucesso ao site.
-    // Assim os documentos realmente entram no fluxo. O resultado virá depois via webhook de saída + polling.
-    const N8N_ACCEPT_TIMEOUT_MS = 15000; // 15 segundos
+    console.log('📤 Enviando para n8n (multipart, arquivos como binário):', N8N_WEBHOOK_INPUT_URL);
+    
+    const N8N_ACCEPT_TIMEOUT_MS = 15000;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), N8N_ACCEPT_TIMEOUT_MS);
 
@@ -52,8 +56,8 @@ app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
     try {
       response = await fetch(N8N_WEBHOOK_INPUT_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: formData,
+        headers: formData.getHeaders(),
         signal: controller.signal
       });
     } catch (fetchError) {

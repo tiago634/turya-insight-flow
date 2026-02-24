@@ -34,15 +34,12 @@ Este documento explica como configurar os webhooks do n8n para integrar com o si
 
 ### Dados Recebidos
 
-O webhook recebe **JSON** (body preenchido) com os campos:
+O webhook recebe **multipart/form-data** (arquivos como binário, sem base64):
 
-- `session_id`: UUID único da sessão (obrigatório)
-- `webhook_output_url`: URL onde o n8n deve enviar o resultado
-- `timestamp`, `quantidade_arquivos`: metadados
-- `arquivo_0`, `arquivo_1`, ...: conteúdo dos PDFs em **base64**
-- `arquivo_0_filename`, `arquivo_0_mimetype`, ...: nome e tipo de cada arquivo
+- **Campos de texto:** `session_id`, `webhook_output_url`, `timestamp`, `quantidade_arquivos`
+- **Arquivos:** `arquivo_0`, `arquivo_1`, ... (binário, mesmo tipo e nome original)
 
-No nó Webhook, use por exemplo: `{{ $json.body.session_id }}`, `{{ $json.body.webhook_output_url }}`. Se o fluxo precisar dos arquivos em binário, use um nó Code para converter base64 em binary.
+No n8n, se o `body` do output do Webhook vier vazio, confira no nó Webhook se há opção tipo "Body Content Type" / "Form Data" ou "Multipart" e ative. Os arquivos podem estar em **binary** (ex.: `$binary.arquivo_0`). Para os campos, use `{{ $json.body.session_id }}` ou `{{ $json.session_id }}` conforme a estrutura do output.
 
 ### Exemplo de URLs do Webhook de Entrada
 
