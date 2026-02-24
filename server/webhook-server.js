@@ -62,49 +62,29 @@ app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
     
     console.log('📤 Enviando para n8n (multipart,', bodyBuffer.length, 'bytes,', req.files?.length || 0, 'arquivos):', N8N_WEBHOOK_INPUT_URL);
     
-    const N8N_ACCEPT_TIMEOUT_MS = 15000;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), N8N_ACCEPT_TIMEOUT_MS);
+    // Não esperar a resposta do n8n: o fluxo pode levar vários minutos (ex.: 4–5 min).
+    // Retornamos sucesso na hora; o n8n processa em background e envia o resultado para /webhook/result.
+    // O frontend já faz polling e mostra o resultado quando chegar.
+    fetch(N8N_WEBHOOK_INPUT_URL, {
+      method: 'POST',
+      body: bodyBuffer,
+      headers: {
+        'Content-Type': headers['content-type'],
+        'Content-Length': String(bodyBuffer.length)
+      }
+    })
+      .then((response) => {
+        console.log('📥 Resposta do n8n (background):', response.status);
+        if (!response.ok) {
+          response.text().then((t) => console.error('⚠️ n8n retornou:', response.status, t?.slice(0, 300)));
+        }
+      })
+      .catch((err) => console.error('⚠️ Erro ao enviar para n8n (background):', err.message));
 
-    let response;
-    try {
-      response = await fetch(N8N_WEBHOOK_INPUT_URL, {
-        method: 'POST',
-        body: bodyBuffer,
-        headers: {
-          'Content-Type': headers['content-type'],
-          'Content-Length': String(bodyBuffer.length)
-        },
-        signal: controller.signal
-      });
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      const isTimeout = fetchError.name === 'AbortError';
-      console.error(isTimeout ? '⚠️ Timeout aguardando n8n (15s) - documentos podem não ter entrado no fluxo' : '⚠️ Erro ao enviar para n8n:', fetchError.message);
-      return res.status(504).json({
-        error: isTimeout
-          ? 'O n8n demorou para responder. Tente novamente ou verifique se o fluxo está ativo.'
-          : `Erro ao enviar para n8n: ${fetchError.message}`
-      });
-    }
-
-    clearTimeout(timeoutId);
-
-    console.log('📥 Resposta do n8n:', response.status, response.status === 200 ? '- documentos recebidos pelo fluxo' : '- verifique o fluxo no n8n');
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('⚠️ n8n retornou:', response.status, errText);
-      return res.status(502).json({
-        error: `n8n retornou ${response.status}. Os documentos podem não ter entrado no fluxo.`,
-        details: errText.slice(0, 500)
-      });
-    }
-
-    // n8n aceitou; o fluxo vai rodar e enviar o resultado para /webhook/result. O site faz polling.
+    // Resposta imediata: fluxo em processamento; resultado virá via /webhook/result e o site faz polling.
     res.json({
       success: true,
-      message: 'Documentos enviados para análise com sucesso. Processando em background...'
+      message: 'Documentos enviados para análise. O processamento pode levar alguns minutos; aguarde na tela de carregamento.'
     });
     
   } catch (error) {
