@@ -1,5 +1,5 @@
 // Servidor simples para receber webhook de saída do n8n
-// Armazena resultados em memória (não persiste entre reinicializações)
+// Armazena resultados em Redis (compartilhado entre instâncias no Railway) ou em memória
 
 const express = require('express');
 const cors = require('cors');
@@ -9,8 +9,52 @@ const FormData = require('form-data');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Armazenamento em memória (em produção, considere usar Redis ou similar)
-const analysisResults = new Map();
+const REDIS_URL = process.env.REDIS_URL;
+const PREFIX = 'analysis:';
+
+// Store compartilhado: Redis se REDIS_URL existir (várias instâncias Railway), senão Map (local)
+let redisClient = null;
+const memoryMap = new Map();
+
+async function storeGet(sessionId) {
+  if (redisClient) {
+    const raw = await redisClient.get(PREFIX + sessionId);
+    return raw ? JSON.parse(raw) : null;
+  }
+  return memoryMap.get(sessionId) ?? null;
+}
+
+async function storeSet(sessionId, data) {
+  if (redisClient) {
+    await redisClient.set(PREFIX + sessionId, JSON.stringify(data));
+    return;
+  }
+  memoryMap.set(sessionId, data);
+}
+
+async function storeDelete(sessionId) {
+  if (redisClient) {
+    await redisClient.del(PREFIX + sessionId);
+    return;
+  }
+  memoryMap.delete(sessionId);
+}
+
+async function storeSize() {
+  if (redisClient) {
+    const keys = await redisClient.keys(PREFIX + '*');
+    return keys.length;
+  }
+  return memoryMap.size;
+}
+
+async function storeKeys() {
+  if (redisClient) {
+    const keys = await redisClient.keys(PREFIX + '*');
+    return keys.map(k => k.slice(PREFIX.length));
+  }
+  return Array.from(memoryMap.keys());
+}
 
 // Limite de body grande para receber HTML em base64 ou arquivo no /webhook/result
 const BODY_LIMIT = '50mb';
@@ -86,7 +130,7 @@ app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
           // e enviar o resultado via POST /webhook/result quando terminar. Frontend continua em polling.
           const isTimeout = response.status === 524 || response.status === 504;
           if (sessionId && !isTimeout) {
-            analysisResults.set(sessionId, { session_id: sessionId, status: 'error', error: `n8n retornou ${response.status}` });
+            storeSet(sessionId, { session_id: sessionId, status: 'error', error: `n8n retornou ${response.status}` }).catch(e => console.error('storeSet error:', e));
           } else if (sessionId && isTimeout) {
             console.log('⏳ Timeout na conexão (524/504); aguardando resultado via /webhook/result se o fluxo enviar.');
           }
@@ -96,19 +140,19 @@ app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
         if (sessionId && (contentType.includes('text/html') || contentType.includes('application/octet-stream'))) {
           const buf = await response.arrayBuffer();
           const base64 = Buffer.from(buf).toString('base64');
-          analysisResults.set(sessionId, {
+          storeSet(sessionId, {
             session_id: sessionId,
             html_content: base64,
             status: 'completed',
             received_at: new Date().toISOString()
-          });
+          }).catch(e => console.error('storeSet error:', e));
           console.log('✅ Resultado gravado para session_id:', sessionId, '(Respond to Webhook)');
         } else if (sessionId) {
           const text = await response.text();
           if (text && text.length < 5000) {
             try {
               const json = JSON.parse(text);
-              if (json.session_id) analysisResults.set(json.session_id, { ...json, received_at: new Date().toISOString() });
+              if (json.session_id) storeSet(json.session_id, { ...json, received_at: new Date().toISOString() }).catch(e => console.error('storeSet error:', e));
             } catch (_) {}
           }
         }
@@ -116,7 +160,7 @@ app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
       .catch((err) => {
         console.error('⚠️ Erro ao enviar para n8n (background):', err.message);
         if (sessionId) {
-          analysisResults.set(sessionId, { session_id: sessionId, status: 'error', error: err.message });
+          storeSet(sessionId, { session_id: sessionId, status: 'error', error: err.message }).catch(e => console.error('storeSet error:', e));
         }
       });
 
@@ -214,8 +258,8 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
       });
     }
 
-    // Armazenar resultado
-    analysisResults.set(sessionId, {
+    // Armazenar resultado (Redis compartilhado entre instâncias no Railway)
+    await storeSet(sessionId, {
       session_id: sessionId,
       html_content: htmlContent,
       status: status,
@@ -250,7 +294,7 @@ const noCacheHeaders = {
   'Expires': '0'
 };
 
-app.get('/api/analysis/:sessionId', (req, res) => {
+app.get('/api/analysis/:sessionId', async (req, res) => {
   const { sessionId } = req.params;
 
   res.set(noCacheHeaders);
@@ -259,12 +303,14 @@ app.get('/api/analysis/:sessionId', (req, res) => {
     return res.status(400).json({ error: 'session_id é obrigatório' });
   }
 
-  const result = analysisResults.get(sessionId);
+  const result = await storeGet(sessionId);
 
   if (!result) {
+    const total = await storeSize();
+    const keys = await storeKeys();
     console.log(`🔍 Polling: session_id ${sessionId} ainda não recebeu resultado do n8n`);
-    console.log(`🔍 Total de resultados armazenados: ${analysisResults.size}`);
-    console.log(`🔍 Session IDs armazenados:`, Array.from(analysisResults.keys()));
+    console.log(`🔍 Total de resultados armazenados: ${total}`);
+    console.log(`🔍 Session IDs armazenados:`, keys);
     return res.json({ 
       status: 'processing', 
       session_id: sessionId 
@@ -276,26 +322,49 @@ app.get('/api/analysis/:sessionId', (req, res) => {
 });
 
 // Endpoint para limpar resultados antigos (opcional)
-app.delete('/api/analysis/:sessionId', (req, res) => {
+app.delete('/api/analysis/:sessionId', async (req, res) => {
   const { sessionId } = req.params;
-  analysisResults.delete(sessionId);
+  await storeDelete(sessionId);
   res.json({ success: true, message: 'Resultado removido' });
 });
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
+  const total = await storeSize();
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    stored_results: analysisResults.size
+    stored_results: total
   });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Servidor webhook rodando na porta ${PORT}`);
-  console.log(`📡 Webhook de saída: http://0.0.0.0:${PORT}/webhook/result`);
-  console.log(`🔍 Status check: http://0.0.0.0:${PORT}/api/analysis/:sessionId`);
-  console.log(`🌐 Ambiente: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 URL do n8n configurada: ${N8N_WEBHOOK_INPUT_URL}`);
-  console.log(`⚠️  Verifique se a URL está correta (deve ser /webhook/ e não /webhook-test/)`);
+async function startServer() {
+  if (REDIS_URL) {
+    try {
+      const { createClient } = require('redis');
+      redisClient = createClient({ url: REDIS_URL });
+      redisClient.on('error', (err) => console.error('Redis error:', err.message));
+      await redisClient.connect();
+      console.log('📦 Redis conectado (resultados compartilhados entre instâncias)');
+    } catch (err) {
+      console.error('❌ Redis falhou, usando memória local:', err.message);
+      redisClient = null;
+    }
+  } else {
+    console.log('📦 Armazenamento em memória (defina REDIS_URL no Railway para múltiplas instâncias)');
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Servidor webhook rodando na porta ${PORT}`);
+    console.log(`📡 Webhook de saída: http://0.0.0.0:${PORT}/webhook/result`);
+    console.log(`🔍 Status check: http://0.0.0.0:${PORT}/api/analysis/:sessionId`);
+    console.log(`🌐 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🔗 URL do n8n configurada: ${N8N_WEBHOOK_INPUT_URL}`);
+    console.log(`⚠️  Verifique se a URL está correta (deve ser /webhook/ e não /webhook-test/)`);
+  });
+}
+
+startServer().catch((err) => {
+  console.error('Falha ao iniciar servidor:', err);
+  process.exit(1);
 });

@@ -44,6 +44,16 @@ PORT=3001 node webhook-server.js
 - `DELETE /api/analysis/:sessionId` - Remove resultado
 - `GET /health` - Health check
 
+## Redis (Railway com várias instâncias)
+
+Se o Railway rodar **mais de uma instância**, o resultado gravado pelo n8n pode ficar em uma instância e o polling do frontend bater em outra (em memória cada uma tem seu próprio Map). Para compartilhar o estado:
+
+1. No Railway, adicione o plugin **Redis** ao projeto (ou crie um Redis e copie a URL).
+2. Defina a variável **`REDIS_URL`** no serviço do servidor (geralmente o Railway já expõe algo como `REDIS_URL` quando o Redis está no mesmo projeto).
+3. Faça redeploy. O servidor usará Redis para armazenar resultados; o frontend passará a receber o relatório no polling.
+
+Sem `REDIS_URL`, o servidor usa memória local (ok para uma única instância ou desenvolvimento).
+
 ## Porta
 
 Padrão: `3001`
