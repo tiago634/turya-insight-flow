@@ -11,7 +11,7 @@ import Footer from "@/components/Footer";
 type AppState = "upload" | "processing" | "completed" | "error";
 
 const POLLING_INTERVAL = 3000; // 3 segundos
-const MAX_POLLING_TIME = 10 * 60 * 1000; // 10 minutos
+const MAX_POLLING_TIME = 10 * 60 * 1000; // 10 minutos (tempo máximo de espera pelo resultado)
 // URL do servidor local para verificar status
 const STATUS_CHECK_URL = import.meta.env.VITE_WEBHOOK_SERVER_URL || "http://localhost:3001";
 
@@ -25,7 +25,9 @@ const Index = () => {
 
   const checkAnalysisStatus = async (sessionId: string) => {
     try {
-      const response = await fetch(`${STATUS_CHECK_URL}/api/analysis/${sessionId}`);
+      // Query param evita cache do navegador (304) e garante resposta sempre atual
+      const url = `${STATUS_CHECK_URL}/api/analysis/${sessionId}?t=${Date.now()}`;
+      const response = await fetch(url);
       
       if (!response.ok) {
         throw new Error(`Erro ao verificar status: ${response.status}`);

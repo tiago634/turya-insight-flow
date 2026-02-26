@@ -114,7 +114,132 @@ Você pode enviar em dois formatos:
 }
 ```
 
-#### Opção 2: FormData
+#### Opção 2: Enviar o arquivo (multipart, sem base64)
+
+Se preferir **não** converter para base64 (evita "Payload Too Large" e envia o arquivo direto), use a configuração abaixo no nó **HTTP Request**.
+
+---
+
+### Configuração passo a passo do nó HTTP Request (sem base64)
+
+**Requisito:** O nó anterior deve ser o que tem o HTML em **binary** (ex.: "Respond to Webhook (HTML 2)" ou o nó que gera o arquivo `comparativo_turya_....html`). Não use nó Code para base64.
+
+| Campo | Valor |
+|--------|--------|
+| **Method** | `POST` |
+| **URL** | `https://serene-clarity-production.up.railway.app/webhook/result` |
+| **Authentication** | None |
+| **Send Body** | ON (ativado) |
+| **Body Content Type** | **Form-Data** (obrigatório). **Não** use "n8n Binary File" — com isso o servidor não recebe o `session_id` e o arquivo junto e o frontend não recebe o relatório. |
+| **Specify Body** | Using Fields Below (ou "Define Below") |
+
+**Body Parameters** – adicione **dois** parâmetros:
+
+1. **Campo 1 – session_id (texto)**  
+   - **Name:** `session_id`  
+   - **Value:** expressão que pega o `session_id` do webhook de entrada. Exemplos (ajuste o nome do nó se for diferente):
+     - `{{ $('Webhook').first().json.body.session_id }}`
+     - ou `{{ $('NomeDoSeuNoWebhook').first().json.body.session_id }}`  
+   - Tipo: **String** / texto (não File).
+
+2. **Campo 2 – arquivo HTML (binário)**  
+   - **Name:** `data` (ou `html` ou `html_file` – o servidor aceita qualquer um desses).  
+   - **Value / Input:** usar o **binary** do item atual. No n8n:
+     - Em "Input Data Field" ou "Binary Property", escolha o nome do binary que contém o HTML (geralmente `data`).
+     - Ou marque como tipo **File** e selecione a propriedade binária (ex.: `data`) do nó de entrada.  
+   - Tipo: **File** (arquivo) referenciando o binary do nó anterior.
+
+   **Importante:** O nó **HTTP Request** precisa receber como entrada o item que **contém o binary do HTML**. Ou seja, a conexão deve vir do nó que gera o arquivo (ex.: **"gerar HTML1"**), não só de um nó que tem só JSON. Se o input do HTTP Request vier apenas de "Respond to Webhook (HTML 200)1" e esse nó não repassar o binary, o campo File ficará vazio e o Railway devolverá 400 "Arquivo HTML não recebido". Conecte o HTTP Request ao nó cuja saída tem a aba **Binary** com o HTML (ex.: `data`), ou use Merge para juntar o binary com o restante dos dados.
+
+**Resumo visual:**
+
+```
+Body Content Type: Form-Data Multipart
+
+Body Parameters:
+  Name: session_id     Value: {{ $('Webhook').first().json.body.session_id }}
+  Name: data           Value: [Binary - propriedade "data" do input]
+```
+
+Se o nome do seu nó Webhook de entrada for outro (ex.: "Webhook1"), troque `$('Webhook')` por `$('Webhook1')`. O servidor aceita o arquivo nos campos `data`, `html_file` ou `html` (limite 50 MB).
+
+---
+
+### Checklist: fazer o relatório aparecer no frontend
+
+Para o **arquivo ser entregue no frontend** (e não ficar só em “Analisando...” ou em erro), faça no n8n:
+
+1. **Entrada do HTTP Request**  
+   Conecte o **HTTP Request** ao nó que **tem o HTML em binary** (ex.: **gerar HTML1**). Esse nó deve mostrar na aba **Binary** um item (ex.: `data`) com o arquivo `.html`. Se hoje a entrada do HTTP Request vem só de “Respond to Webhook (HTML 200)1”, mude a conexão para vir do nó que gera o HTML, ou use **Merge** para juntar o binary desse nó com o que você precisa (ex.: session_id do Webhook).
+
+2. **Campo session_id**  
+   No Form-Data do HTTP Request, mantenha o parâmetro **session_id** com a expressão:  
+   `{{ $('Webhook').first().json.body.session_id }}`  
+   (ajuste o nome do nó se for diferente.)
+
+3. **Campo do arquivo (File)**  
+   No Form-Data, o segundo parâmetro deve ser do tipo **File**:
+   - **Name:** `data` (ou `html` ou `html_file`).
+   - **Input / Binary:** selecione a propriedade binária que contém o HTML no item que chega ao HTTP Request (geralmente **data**). Esse nome deve ser o mesmo que aparece na aba **Binary** do nó que gera o HTML.
+
+4. **Testar**  
+   Rode o fluxo de ponta a ponta (envio pelo frontend). Quando o n8n enviar o HTML nesse POST, o Railway grava o resultado e o frontend, no polling, recebe e **exibe o relatório**.
+
+5. **Body Content Type = Form-Data (não "n8n Binary File")**  
+   Se no HTTP Request o **Body Content Type** estiver como **"n8n Binary File"**, o servidor pode responder 200 mas **não** receber o HTML (e o frontend fica em "Analisando..." para sempre). Altere para **Form-Data** e configure **dois** parâmetros: **session_id** (texto) e **data** (tipo File, Input Data Field Name = `data`). O backend só responde 200 quando de fato recebe HTML; caso contrário responde 400 com a dica.
+
+---
+
+### Como conferir o checklist no n8n
+
+Use estes passos para **checar** se cada item está certo:
+
+**1. De onde o HTTP Request recebe os dados**
+
+- No canvas, olhe a **seta que entra** no nó **HTTP Request**. Ela vem de qual nó?
+- Clique no nó **de onde sai essa seta** (ex.: "gerar HTML1" ou "Respond to Webhook (HTML 200)1").
+- Abra a aba **OUTPUT** desse nó e veja se existe a aba **Binary** (ao lado de JSON/Schema/Table).
+- **Se tiver aba Binary** com um item (ex.: `data`) e tamanho do arquivo → esse nó tem o HTML; está ok a conexão para o HTTP Request vir daqui (ou de um Merge que inclua esse nó).
+- **Se não tiver Binary** (só JSON) → o HTTP Request não está recebendo o arquivo. Conecte o HTTP Request ao nó que gera o HTML (ex.: "gerar HTML1") ou use Merge para incluir esse nó na entrada.
+
+**2. Campo session_id**
+
+- Abra o nó **HTTP Request** → **Parameters** → **Body** (Form-Data).
+- No parâmetro **session_id**, o **Value** deve estar no modo expressão (ícone `fx` ou `{}`).
+- A expressão deve ser algo como `{{ $('Webhook').first().json.body.session_id }}`, com o nome correto do seu nó Webhook de entrada.
+- Para testar: execute o nó **Webhook** (ou o primeiro nó), veja no OUTPUT o `body.session_id`; o mesmo valor será usado na execução quando o HTTP Request rodar.
+
+**3. Campo do arquivo (File)**
+
+- No mesmo Body do **HTTP Request**, deve existir um **segundo parâmetro** além de `session_id`.
+- Esse parâmetro deve ter **Name** = `data` (ou `html` ou `html_file`).
+- O tipo deve ser **File** (não String). Deve haver opção de escolher **Input Data Field** ou **Binary Property**.
+- O valor deve apontar para a propriedade binária que existe no item de **entrada** do HTTP Request (ex.: `data`). O nome tem que ser igual ao que aparece na aba **Binary** do nó que gera o HTML.
+
+**4. Testar de ponta a ponta**
+
+- Envie um arquivo pelo **frontend** (Analisar Cotações).
+- No n8n, deixe o fluxo rodar até o fim (incluindo o HTTP Request).
+- No **HTTP Request**, abra **OUTPUT**: se o Railway aceitou, verá algo como `success: true`, `message: "Resultado recebido com sucesso"`.
+- No **frontend**, a tela deve sair de "Analisando..." e **exibir o relatório** (ou mostrar erro apenas se algo tiver falhado). Se continuar em "Analisando..." indefinidamente, o backend não recebeu HTML: volte ao item 1 e 3 (entrada do HTTP Request e campo File).
+
+---
+
+### Onde está o `session_id`? (erro "no connection back to the node 'Webhook'")
+
+O **session_id é diferente a cada execução** no Railway porque o frontend gera um novo UUID por envio. Esse mesmo ID é enviado pelo Railway para o n8n **no primeiro Webhook do fluxo** (o que recebe o POST com o arquivo).
+
+- O nó que deve ser usado na expressão é **o primeiro nó do workflow** — o Webhook que recebe a requisição do Railway (multipart com `session_id` + arquivo). Não use o "Respond to Webhook (HTML 200)1" (esse é um nó de resposta no meio/fim do fluxo).
+- No n8n, abra o **primeiro nó** do fluxo (o trigger, no topo da tela). O **nome** que aparece nele é o que você deve usar na expressão, por exemplo:
+  - Se o nó se chama **"When receiving a webhook"** → use `$('When receiving a webhook').first().json.body.session_id`
+  - Se for **"Webhook"** → use `$('Webhook').first().json.body.session_id`
+  - Se for **"Respond to Webhook"** (o de entrada) ou outro nome → use esse nome: `$('Nome exato do nó').first().json.body.session_id`
+- Se der erro "There is no connection back to the node 'Webhook'", significa que não existe nó chamado exatamente "Webhook" no fluxo. Corrija o nome na expressão para o **nome exato** do primeiro nó (como aparece no canvas).
+- Se `body.session_id` não funcionar, teste também:
+  - `{{ $('NomeDoPrimeiroNo').first().json.session_id }}`
+  - ou abra a saída desse primeiro nó (Execute Node) e veja em qual chave está o `session_id` (pode ser `body`, `query`, etc.) e use essa chave na expressão.
+
+#### Opção 3: FormData com base64
 
 ```
 session_id: uuid-da-sessao

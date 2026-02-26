@@ -12,13 +12,16 @@ const PORT = process.env.PORT || 3001;
 // Armazenamento em memória (em produção, considere usar Redis ou similar)
 const analysisResults = new Map();
 
+// Limite de body grande para receber HTML em base64 ou arquivo no /webhook/result
+const BODY_LIMIT = '50mb';
+
 // Middleware
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: BODY_LIMIT }));
+app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
 
-// Configurar multer para FormData
-const upload = multer();
+// Multer: aceitar arquivos grandes no /webhook/result
+const upload = multer({ limits: { fileSize: 50 * 1024 * 1024 } }); // 50 MB
 
 // URL do webhook de entrada do n8n
 const N8N_WEBHOOK_INPUT_URL = process.env.N8N_WEBHOOK_INPUT_URL || 'https://wgatech.app.n8n.cloud/webhook/219cc658-bea9-4cb9-b463-9ead6f8cdc21';
@@ -169,11 +172,12 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
       error = req.body.error;
     }
 
-    // Verificar se veio como arquivo
+    // Verificar se veio como arquivo (multipart)
     if (req.files && req.files.length > 0) {
       const htmlFile = req.files.find(f => 
         f.fieldname === 'html_file' || 
         f.fieldname === 'html' || 
+        f.fieldname === 'data' ||
         f.originalname.endsWith('.html')
       );
       
@@ -198,6 +202,18 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
       });
     }
 
+    // Nunca aceitar resultado sem HTML: o frontend só exibe quando tem html_content
+    if (!htmlContent || (typeof htmlContent === 'string' && htmlContent.length === 0)) {
+      console.error('❌ Nenhum HTML recebido. Content-Type:', req.headers['content-type']);
+      console.error('❌ req.files:', req.files?.length ?? 0, req.files ? req.files.map(f => ({ field: f.fieldname, size: f.size })) : []);
+      console.error('❌ req.body keys:', Object.keys(req.body || {}));
+      return res.status(400).json({
+        success: false,
+        error: 'Arquivo HTML não recebido',
+        hint: 'Use Body Content Type "Form-Data" (não "n8n Binary File") com DOIS parâmetros: 1) session_id (texto), 2) data (tipo File, Input Data Field Name = "data").'
+      });
+    }
+
     // Armazenar resultado
     analysisResults.set(sessionId, {
       session_id: sessionId,
@@ -209,12 +225,13 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
 
     console.log(`✅ Resultado salvo para session_id: ${sessionId}`);
     console.log(`   Status: ${status}`);
-    console.log(`   HTML size: ${htmlContent ? htmlContent.length : 0} bytes`);
+    console.log(`   HTML size: ${htmlContent.length} bytes (frontend vai receber no polling)`);
 
     res.json({ 
       success: true, 
       session_id: sessionId,
-      message: 'Resultado recebido com sucesso'
+      message: 'Resultado recebido com sucesso',
+      html_received_bytes: htmlContent.length
     });
 
   } catch (error) {
@@ -226,8 +243,17 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
 });
 
 // Endpoint para verificar status (polling do frontend)
+// Headers anti-cache: evita 304 e garante que o frontend sempre receba a resposta atual (completed/processing)
+const noCacheHeaders = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  'Pragma': 'no-cache',
+  'Expires': '0'
+};
+
 app.get('/api/analysis/:sessionId', (req, res) => {
   const { sessionId } = req.params;
+
+  res.set(noCacheHeaders);
 
   if (!sessionId) {
     return res.status(400).json({ error: 'session_id é obrigatório' });
