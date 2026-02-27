@@ -9,7 +9,8 @@ const FormData = require('form-data');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-const REDIS_URL = process.env.REDIS_URL;
+// Railway pode expor REDIS_URL ou REDIS_PUBLIC_URL; aceitamos os dois
+const REDIS_URL = process.env.REDIS_URL || process.env.REDIS_PUBLIC_URL;
 const PREFIX = 'analysis:';
 
 // Store compartilhado: Redis se REDIS_URL existir (várias instâncias Railway), senão Map (local)
@@ -270,6 +271,7 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
     console.log(`✅ Resultado salvo para session_id: ${sessionId}`);
     console.log(`   Status: ${status}`);
     console.log(`   HTML size: ${htmlContent.length} bytes (frontend vai receber no polling)`);
+    if (redisClient) console.log(`   Store: Redis (key ${PREFIX}${sessionId})`);
 
     res.json({ 
       success: true, 
@@ -317,7 +319,8 @@ app.get('/api/analysis/:sessionId', async (req, res) => {
     });
   }
 
-  console.log(`✅ Polling: resultado encontrado para session_id ${sessionId}`);
+  const hasHtml = !!(result.html_content && result.html_content.length > 0);
+  console.log(`✅ Polling: resultado encontrado para session_id ${sessionId}, hasHtml: ${hasHtml}`);
   res.json(result);
 });
 
@@ -338,6 +341,34 @@ app.get('/health', async (req, res) => {
   });
 });
 
+// Diagnóstico: descobrir por que o frontend não recebe o resultado
+app.get('/api/debug', async (req, res) => {
+  res.set(noCacheHeaders);
+  const keys = await storeKeys();
+  res.json({
+    redis_connected: !!redisClient,
+    stored_results_count: keys.length,
+    session_ids: keys,
+    hint: keys.length === 0 ? 'Nenhum resultado gravado. O n8n já enviou POST /webhook/result com sucesso (200)?' : 'Teste GET /api/debug/session/SEU_SESSION_ID'
+  });
+});
+
+app.get('/api/debug/session/:sessionId', async (req, res) => {
+  res.set(noCacheHeaders);
+  const { sessionId } = req.params;
+  const result = await storeGet(sessionId);
+  const found = !!result;
+  const hasHtml = found && !!(result.html_content && result.html_content.length > 0);
+  res.json({
+    session_id: sessionId,
+    found,
+    has_html: hasHtml,
+    status: result?.status ?? null,
+    store: redisClient ? 'redis' : 'memory',
+    hint: !found ? 'Resultado não encontrado. n8n enviou o POST /webhook/result com este session_id? Verifique os logs do Railway no momento em que o fluxo terminou.' : (hasHtml ? 'Backend tem o HTML. Se o frontend não exibe, verifique cache ou resposta do GET /api/analysis/' + sessionId : 'Resultado existe mas sem html_content. n8n deve enviar o arquivo no campo "data" (Form-Data).')
+  });
+});
+
 async function startServer() {
   if (REDIS_URL) {
     try {
@@ -351,7 +382,7 @@ async function startServer() {
       redisClient = null;
     }
   } else {
-    console.log('📦 Armazenamento em memória (defina REDIS_URL no Railway para múltiplas instâncias)');
+    console.log('📦 Armazenamento em memória (defina REDIS_URL ou REDIS_PUBLIC_URL no Railway para múltiplas instâncias)');
   }
 
   app.listen(PORT, '0.0.0.0', () => {
