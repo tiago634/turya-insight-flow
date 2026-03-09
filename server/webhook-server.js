@@ -297,7 +297,7 @@ const noCacheHeaders = {
 };
 
 app.get('/api/analysis/:sessionId', async (req, res) => {
-  const { sessionId } = req.params;
+  const sessionId = (req.params.sessionId || '').trim();
 
   res.set(noCacheHeaders);
 
@@ -355,18 +355,25 @@ app.get('/api/debug', async (req, res) => {
 
 app.get('/api/debug/session/:sessionId', async (req, res) => {
   res.set(noCacheHeaders);
-  const { sessionId } = req.params;
+  const sessionId = (req.params.sessionId || '').trim();
+  if (!sessionId) return res.status(400).json({ error: 'sessionId é obrigatório' });
   const result = await storeGet(sessionId);
   const found = !!result;
   const hasHtml = found && !!(result.html_content && result.html_content.length > 0);
-  res.json({
+  const payload = {
     session_id: sessionId,
     found,
     has_html: hasHtml,
     status: result?.status ?? null,
     store: redisClient ? 'redis' : 'memory',
     hint: !found ? 'Resultado não encontrado. n8n enviou o POST /webhook/result com este session_id? Verifique os logs do Railway no momento em que o fluxo terminou.' : (hasHtml ? 'Backend tem o HTML. Se o frontend não exibe, verifique cache ou resposta do GET /api/analysis/' + sessionId : 'Resultado existe mas sem html_content. n8n deve enviar o arquivo no campo "data" (Form-Data).')
-  });
+  };
+  if (!found) {
+    const keys = await storeKeys();
+    payload.stored_session_ids = keys;
+    payload.match_hint = keys.length === 0 ? 'Nenhum resultado no store.' : (keys.includes(sessionId) ? 'Este session_id está na lista mas storeGet retornou null (bug?).' : 'Este session_id não está na lista. Confira se o frontend usa o mesmo ID que o n8n enviou no POST.');
+  }
+  res.json(payload);
 });
 
 async function startServer() {
