@@ -171,6 +171,10 @@ const Index = () => {
     );
   }
 
+  if (appState === "completed") {
+    return <DownloadReport onReset={handleReset} />;
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -185,10 +189,6 @@ const Index = () => {
             onStartProcessing={handleStartProcessing}
             sessionId={sessionId}
           />
-        )}
-
-        {appState === "completed" && (
-          <DownloadReport onReset={handleReset} />
         )}
 
         {appState === "error" && (
