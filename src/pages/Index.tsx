@@ -33,27 +33,39 @@ const Index = () => {
         throw new Error(`Erro ao verificar status: ${response.status}`);
       }
 
-      const data = await response.json();
+      const text = await response.text();
+      let data: { status?: string; html_content?: string; error?: string };
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        console.error("Polling: resposta não é JSON válido. Tamanho:", text.length, parseErr);
+        return;
+      }
 
-      if (data.status === "completed" && data.html_content) {
-        // Converter base64 para blob
-        const binaryString = atob(data.html_content);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
+      const hasHtml = !!(data.html_content && data.html_content.length > 0);
+      const isCompleted = data.status === "completed" || (hasHtml && data.status !== "error");
+      if (isCompleted && hasHtml) {
+        try {
+          const binaryString = atob(data.html_content!);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          const blob = new Blob([bytes], { type: "text/html" });
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          setHtmlBlob(blob);
+          setAppState("completed");
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        } catch (blobErr) {
+          console.error("Polling: erro ao converter html_content para blob", blobErr);
         }
-        const blob = new Blob([bytes], { type: "text/html" });
-        
-        // Parar polling
-        if (pollingIntervalRef.current) {
-          clearInterval(pollingIntervalRef.current);
-          pollingIntervalRef.current = null;
-        }
-        
-        setHtmlBlob(blob);
-        setAppState("completed");
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      } else if (data.status === "error") {
+        return;
+      }
+
+      if (data.status === "error") {
         // Parar polling
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current);
@@ -63,20 +75,21 @@ const Index = () => {
         setErrorMessage(data.error || "Erro ao processar análise");
         setAppState("error");
         window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
       }
-      // Se status === "processing", continuar polling
+
+      if (data.status === "processing" && !hasHtml) {
+        console.log("Polling:", data.status, "| backend:", STATUS_CHECK_URL);
+      }
     } catch (error) {
       console.error("Erro ao verificar status:", error);
-      // Não parar o polling em caso de erro de rede, apenas logar
     }
   };
 
   useEffect(() => {
-    // Iniciar polling quando sessionId for definido e estiver em processing
     if (appState === "processing" && sessionId) {
       pollingStartTimeRef.current = Date.now();
-      
-      // Verificar imediatamente
+      console.log("Polling iniciado. Backend:", STATUS_CHECK_URL, "| Session:", sessionId);
       checkAnalysisStatus(sessionId);
       
       // Configurar polling periódico
@@ -149,6 +162,15 @@ const Index = () => {
     pollingStartTimeRef.current = null;
   };
 
+  if (appState === "processing" && sessionId) {
+    return (
+      <LoadingAnalysis
+        sessionId={sessionId}
+        statusCheckUrl={STATUS_CHECK_URL}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -163,10 +185,6 @@ const Index = () => {
             onStartProcessing={handleStartProcessing}
             sessionId={sessionId}
           />
-        )}
-
-        {appState === "processing" && sessionId && (
-          <LoadingAnalysis sessionId={sessionId} />
         )}
 
         {appState === "completed" && htmlBlob && (

@@ -239,6 +239,15 @@ O **session_id é diferente a cada execução** no Railway porque o frontend ger
   - `{{ $('NomeDoPrimeiroNo').first().json.session_id }}`
   - ou abra a saída desse primeiro nó (Execute Node) e veja em qual chave está o `session_id` (pode ser `body`, `query`, etc.) e use essa chave na expressão.
 
+#### Sintoma: frontend mostra um ID, mas o backend tem outros IDs armazenados
+
+Se a tela fica em "Analisando..." e ao abrir `/api/debug/session/SEU_ID` aparece `found: false` e `stored_session_ids` lista **outros** IDs (não o que está na tela), o n8n está enviando o POST para `/webhook/result` com um **session_id errado**.
+
+- O frontend gera um ID (ex.: `152c5f77-...`) e faz polling com ele. O n8n **tem que** enviar o resultado com **esse mesmo** ID.
+- No nó **HTTP Request** que faz POST para o Railway, o parâmetro **session_id** (Form-Data) deve usar **sempre** o primeiro Webhook do fluxo:  
+  `{{ $('NomeExatoDoPrimeiroNoWebhook').first().json.body.session_id }}`
+- Confira no Railway: em **Logs**, quando o fluxo termina, deve aparecer algo como `session_id recebido do n8n: 152c5f77-...`. Esse valor tem que ser **igual** ao ID que o frontend mostra na tela. Se for diferente, corrija a expressão no n8n (nome do nó e `body.session_id`).
+
 #### Opção 3: FormData com base64
 
 ```

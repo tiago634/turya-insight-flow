@@ -236,6 +236,9 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
       sessionId = req.body.session_id || req.body.sessionId;
     }
 
+    // Normalizar: n8n pode enviar com espaço/newline; frontend faz polling sem. Chave no Redis deve bater.
+    sessionId = typeof sessionId === 'string' ? sessionId.trim() : String(sessionId || '').trim();
+
     if (!sessionId) {
       console.error('❌ session_id não encontrado no resultado do n8n');
       console.error('❌ Body keys:', Object.keys(req.body || {}));
@@ -246,6 +249,9 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
         hint: 'Certifique-se de que o n8n está enviando o session_id no corpo da requisição'
       });
     }
+
+    console.log(`🔑 session_id recebido do n8n: ${sessionId}`);
+    console.log(`🔑 O frontend DEVE estar fazendo polling com este mesmo ID. Se a tela mostrar outro ID, corrija no n8n a expressão do campo session_id no nó HTTP Request (use o primeiro Webhook: $('NomeDoWebhook').first().json.body.session_id).`);
 
     // Nunca aceitar resultado sem HTML: o frontend só exibe quando tem html_content
     if (!htmlContent || (typeof htmlContent === 'string' && htmlContent.length === 0)) {
@@ -305,7 +311,17 @@ app.get('/api/analysis/:sessionId', async (req, res) => {
     return res.status(400).json({ error: 'session_id é obrigatório' });
   }
 
-  const result = await storeGet(sessionId);
+  let result = await storeGet(sessionId);
+
+  // Fallback: chave pode ter sido gravada com espaço/newline pelo n8n; buscar por match com trim
+  if (!result) {
+    const keys = await storeKeys();
+    const matchedKey = keys.find(k => String(k).trim() === sessionId);
+    if (matchedKey != null) {
+      result = await storeGet(matchedKey);
+      if (result) console.log(`🔑 Polling: resultado encontrado via fallback (chave com trim): ${sessionId}`);
+    }
+  }
 
   if (!result) {
     const total = await storeSize();
@@ -320,8 +336,17 @@ app.get('/api/analysis/:sessionId', async (req, res) => {
   }
 
   const hasHtml = !!(result.html_content && result.html_content.length > 0);
-  console.log(`✅ Polling: resultado encontrado para session_id ${sessionId}, hasHtml: ${hasHtml}`);
-  res.json(result);
+  console.log(`✅ Polling: resultado encontrado para session_id ${sessionId}, hasHtml: ${hasHtml}, html_content length: ${result.html_content?.length ?? 0}`);
+
+  // Resposta normalizada: frontend espera status "completed" e html_content (base64)
+  const payload = {
+    session_id: result.session_id || sessionId,
+    status: hasHtml ? 'completed' : (result.status || 'processing'),
+    html_content: result.html_content || null,
+    error: result.error || null,
+    received_at: result.received_at || null
+  };
+  res.json(payload);
 });
 
 // Endpoint para limpar resultados antigos (opcional)

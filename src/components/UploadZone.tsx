@@ -144,6 +144,11 @@ const UploadZone = ({ onSuccess, onError, onStartProcessing, sessionId }: Upload
     console.log("Webhook de entrada:", WEBHOOK_INPUT_URL);
     console.log("Webhook de saída:", WEBHOOK_OUTPUT_URL);
 
+    localStorage.setItem(
+      "turya_analysis",
+      JSON.stringify({ sessionId: newSessionId, startedAt: new Date().toISOString() })
+    );
+
     // INICIAR LOADING IMEDIATAMENTE (sem esperar resposta)
     onStartProcessing(newSessionId);
     setIsSubmitting(false);

@@ -1,102 +1,138 @@
-import { motion } from "framer-motion";
-import { Loader2, FileSearch, Clock } from "lucide-react";
 import { useState, useEffect } from "react";
+import styles from "./LoadingAnalysis.module.css";
+
+const CLAUSES = [
+  "Cláusula 3.1 — Cobertura Principal",
+  "Cláusula 4.2 — Limite de Responsabilidade",
+  "Cláusula 5.0 — Franquia Mínima",
+  "Cláusula 6.3 — Exclusões Específicas",
+  "Cláusula 7.1 — Retroatividade",
+  "Cláusula 8.4 — Condições Especiais",
+];
 
 interface LoadingAnalysisProps {
   sessionId: string;
+  statusCheckUrl?: string;
 }
 
-const LoadingAnalysis = ({ sessionId }: LoadingAnalysisProps) => {
-  const [elapsedTime, setElapsedTime] = useState(0);
+const LoadingAnalysis = ({ sessionId, statusCheckUrl }: LoadingAnalysisProps) => {
+  const [clauseIndex, setClauseIndex] = useState(0);
+  const [clauseVisible, setClauseVisible] = useState(true);
+  const [elapsedSecs, setElapsedSecs] = useState(0);
 
   useEffect(() => {
-    const startTime = Date.now();
-    const interval = setInterval(() => {
-      setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
-    }, 1000);
-
-    return () => clearInterval(interval);
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const id = setInterval(() => {
+      setClauseVisible(false);
+      timeoutId = setTimeout(() => {
+        setClauseIndex((i) => (i + 1) % CLAUSES.length);
+        setClauseVisible(true);
+      }, 320);
+    }, 3800);
+    return () => {
+      clearInterval(id);
+      clearTimeout(timeoutId!);
+    };
   }, []);
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
+  useEffect(() => {
+    const id = setInterval(() => {
+      setElapsedSecs((s) => s + 1);
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const timerStr = `${Math.floor(elapsedSecs / 60)}:${String(elapsedSecs % 60).padStart(2, "0")}`;
 
   return (
-    <section className="py-16">
-      <div className="container mx-auto px-6">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="max-w-2xl mx-auto"
-        >
-          <div className="card-elevated p-8 md:p-12 text-center">
-            {/* Animated Icon */}
-            <motion.div
-              animate={{ 
-                scale: [1, 1.1, 1],
-              }}
-              transition={{ 
-                duration: 2,
-                repeat: Infinity,
-                ease: "easeInOut"
-              }}
-              className="w-24 h-24 mx-auto mb-8 rounded-3xl bg-primary/20 flex items-center justify-center"
-            >
-              <FileSearch className="w-12 h-12 text-primary" />
-            </motion.div>
+    <div className={styles.wrapper}>
+      <div className={styles.noise} aria-hidden />
 
-            <h2 className="text-2xl font-bold mb-4">
-              Analisando suas cotações...
-            </h2>
-
-            {/* Spinner */}
-            <div className="flex justify-center mb-6">
-              <Loader2 className="w-8 h-8 text-primary animate-spin" />
-            </div>
-
-            {/* Indeterminate progress bar */}
-            <div className="w-full h-2 bg-muted rounded-full overflow-hidden mb-6">
-              <motion.div
-                className="h-full bg-primary rounded-full"
-                initial={{ x: "-100%" }}
-                animate={{ x: "200%" }}
-                transition={{
-                  duration: 1.5,
-                  repeat: Infinity,
-                  ease: "easeInOut"
-                }}
-                style={{ width: "50%" }}
-              />
-            </div>
-
-            {/* Timer */}
-            <div className="flex items-center justify-center gap-2 mb-4 text-muted-foreground">
-              <Clock className="w-4 h-4" />
-              <span className="text-sm font-medium">
-                Tempo decorrido: {formatTime(elapsedTime)}
-              </span>
-            </div>
-
-            {/* Session ID (opcional, para debug) */}
-            {sessionId && (
-              <p className="text-xs text-muted-foreground/50 mb-4 font-mono">
-                ID: {sessionId.substring(0, 8)}...
-              </p>
-            )}
-
-            <p className="text-muted-foreground mb-2">
-              Isso pode levar alguns minutos.
-            </p>
-            <p className="text-sm text-muted-foreground/70">
-              Não feche esta página. Você será notificado quando a análise estiver pronta.
-            </p>
+      <nav className={styles.nav}>
+        <div className={styles.logo}>
+          <div className={styles.logoMark}>
+            <svg viewBox="0 0 20 20">
+              <circle cx="10" cy="10" r="7" fill="none" stroke="#fff" strokeWidth="2" />
+              <circle cx="10" cy="10" r="2.5" fill="#fff" />
+            </svg>
           </div>
-        </motion.div>
+          <span className={styles.logoName}>turya</span>
+        </div>
+        <div className={styles.navR}>D&O · Análise inteligente</div>
+      </nav>
+
+      <div className={styles.page}>
+        <div className={styles.left}>
+          <div className={styles.eyebrow}>Análise D&O em andamento</div>
+          <h1 className={styles.headline}>
+            Lendo cada
+            <br />
+            <em>cláusula com</em>
+            <br />
+            atenção.
+          </h1>
+          <p className={styles.bodyText}>
+            Seus documentos estão sendo revisados em profundidade — coberturas, franquias, sublimites e condições especiais.
+          </p>
+          <div className={styles.progressArea}>
+            <div className={styles.progressLineWrap}>
+              <div className={styles.progressFill} />
+              <div className={styles.progressDot} />
+            </div>
+            <div className={styles.progressMeta}>
+              <span className={styles.progressLabel}>
+                Processando<span className={styles.blink} />
+              </span>
+              <span className={styles.timer}>{timerStr}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.right}>
+          <div className={styles.filing}>
+            <div className={`${styles.sheet} ${styles.sheet3}`} />
+            <div className={`${styles.sheet} ${styles.sheet2}`} />
+            <div className={`${styles.sheet} ${styles.sheet1}`}>
+              <div className={styles.sheetInner}>
+                <div className={styles.sheetHeader}>
+                  <div>
+                    <div className={styles.shTag}>Documento em análise</div>
+                    <div className={styles.shTitle}>D&O</div>
+                  </div>
+                  <div className={styles.shPill}>Lendo</div>
+                </div>
+                <div className={styles.lines}>
+                  <div className={`${styles.ln} ${styles.ln100} ${styles.read}`} />
+                  <div className={`${styles.ln} ${styles.ln90} ${styles.read}`} />
+                  <div className={`${styles.ln} ${styles.ln80} ${styles.read}`} />
+                  <div className={`${styles.ln} ${styles.ln65} ${styles.read}`} />
+                  <div className={`${styles.ln} ${styles.ln100} ${styles.reading}`} />
+                  <div className={`${styles.ln} ${styles.ln80}`} />
+                  <div className={`${styles.ln} ${styles.ln45}`} />
+                </div>
+                <div className={styles.clauseBlock}>
+                  <div
+                    className={styles.clauseTag}
+                    style={{
+                      opacity: clauseVisible ? 1 : 0,
+                      transition: "opacity 0.3s",
+                    }}
+                  >
+                    {CLAUSES[clauseIndex]}
+                  </div>
+                  <div className={styles.clauseLines}>
+                    <div className={`${styles.cl} ${styles.cl95}`} />
+                    <div className={`${styles.cl} ${styles.cl80}`} />
+                    <div className={`${styles.cl} ${styles.cl60}`} />
+                  </div>
+                </div>
+              </div>
+              <div className={styles.fold} />
+            </div>
+          </div>
+        </div>
       </div>
-    </section>
+    </div>
   );
 };
 
