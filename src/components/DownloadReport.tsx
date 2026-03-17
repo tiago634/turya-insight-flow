@@ -1,117 +1,176 @@
-import { motion } from "framer-motion";
-import { FileText, Download, RotateCcw, CheckCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useEffect, useState } from "react";
+import styles from "./DownloadReport.module.css";
+
+interface DownloadResult {
+  downloadUrl?: string;
+}
 
 interface DownloadReportProps {
-  htmlBlob: Blob;
   onReset: () => void;
 }
 
-const DownloadReport = ({ htmlBlob, onReset }: DownloadReportProps) => {
-  const handleDownload = () => {
-    const url = window.URL.createObjectURL(htmlBlob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "Analise_DO.html";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+const DownloadReport = ({ onReset }: DownloadReportProps) => {
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    function getResult(): DownloadResult {
+      try {
+        const s = localStorage.getItem("turya_result");
+        if (s) return JSON.parse(s);
+      } catch (e) {
+        console.warn("turya_result inválido no localStorage", e);
+      }
+      const p = new URLSearchParams(window.location.search);
+      return { downloadUrl: p.get("url") || "#" };
+    }
+
+    const result = getResult();
+    if (result.downloadUrl && result.downloadUrl !== "#") {
+      setDownloadUrl(result.downloadUrl);
+    }
+  }, []);
+
+  const handleNewQuotes = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    onReset();
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + " B";
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-  };
+  const href = downloadUrl ?? "#";
+  const isValidUrl = !!downloadUrl && downloadUrl !== "#";
 
   return (
-    <section className="py-16">
-      <div className="container mx-auto px-6">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="max-w-2xl mx-auto"
-        >
-          <div className="card-elevated p-8 md:p-12 text-center">
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-              className="w-24 h-24 mx-auto mb-8 rounded-3xl bg-green-500/20 flex items-center justify-center"
-            >
-              <CheckCircle className="w-12 h-12 text-green-400" />
-            </motion.div>
+    <div className={styles.wrapper}>
+      <div className={styles.noise} aria-hidden />
 
-            <motion.h3
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
-              className="text-3xl font-bold mb-4"
-            >
-              Análise concluída!
-            </motion.h3>
-
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="text-muted-foreground mb-8 max-w-md mx-auto"
-            >
-              O relatório comparativo das suas cotações D&O foi gerado com sucesso.
-            </motion.p>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-              className="flex items-center justify-center gap-4 p-6 rounded-xl bg-primary/10 border border-primary/20 mb-8"
-            >
-              <div className="w-14 h-14 rounded-xl bg-primary/20 flex items-center justify-center">
-                <FileText className="w-7 h-7 text-primary" />
-              </div>
-              <div className="text-left">
-                <p className="font-semibold">Analise_DO.html</p>
-                <p className="text-sm text-muted-foreground">
-                  {formatFileSize(htmlBlob.size)}
-                </p>
-              </div>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.6 }}
-              className="flex flex-col sm:flex-row gap-4 justify-center"
-            >
-              <Button
-                onClick={handleDownload}
-                size="lg"
-                className="gap-2"
-              >
-                <Download className="w-5 h-5" />
-                Baixar Relatório
-              </Button>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.8 }}
-              className="mt-8"
-            >
-              <button
-                onClick={onReset}
-                className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <RotateCcw className="w-4 h-4" />
-                Enviar outras cotações
-              </button>
-            </motion.div>
+      <nav className={styles.nav}>
+        <div className={styles.logo}>
+          <div className={styles.logoMark}>
+            <svg viewBox="0 0 20 20">
+              <circle
+                cx="10"
+                cy="10"
+                r="7"
+                fill="none"
+                stroke="#fff"
+                strokeWidth="2"
+              />
+              <circle cx="10" cy="10" r="2.5" />
+            </svg>
           </div>
-        </motion.div>
+          <span className={styles.logoName}>turya</span>
+        </div>
+        <div className={styles.navTag}>D&amp;O · Análise inteligente</div>
+      </nav>
+
+      <div className={styles.scene}>
+        <div className={styles.centerLine} />
+
+        <div className={styles.colLeft}>
+          <div className={styles.bgNumber}>D&amp;O</div>
+
+          <div className={styles.tag}>Relatório concluído</div>
+
+          <h1 className={styles.headline}>
+            Pronto
+            <br />
+            <span>para decidir.</span>
+          </h1>
+
+          <div className={styles.divider} />
+
+          <p className={styles.body}>
+            O relatório comparativo das suas cotações D&amp;O está gerado.
+            <br />
+            <em>Abra o arquivo e tome sua decisão com clareza.</em>
+          </p>
+
+          <div className={styles.btns}>
+            <a
+              id="btnDownload"
+              className={styles.btnDl}
+              href={href}
+              target={isValidUrl ? "_blank" : undefined}
+              rel={isValidUrl ? "noreferrer" : undefined}
+              download={isValidUrl ? "Analise_DO.html" : undefined}
+            >
+              Baixar relatório
+              <svg className={styles.btnDlIcon} viewBox="0 0 24 24">
+                <path d="M12 15V3M12 15l-4-4M12 15l4-4M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17" />
+              </svg>
+            </a>
+
+            <a href="#" className={styles.btnNew} onClick={handleNewQuotes}>
+              <svg className={styles.btnNewIcon} viewBox="0 0 24 24">
+                <path d="M4 4v5h5M20 20v-5h-5M4 9a9 9 0 0114.93-3.36M20 15A9 9 0 015.07 18.36" />
+              </svg>
+              Enviar novas cotações
+            </a>
+          </div>
+        </div>
+
+        <div className={styles.colRight}>
+          <div className={styles.composition}>
+            <div className={styles.floatNum}>01</div>
+
+            <div className={`${styles.sheet} ${styles.s3}`} />
+            <div className={`${styles.sheet} ${styles.s2}`} />
+
+            <div className={`${styles.sheet} ${styles.s1}`}>
+              <div className={styles.docHead}>
+                <div>
+                  <div className={styles.docCo}>Turya Intelligence</div>
+                  <div className={styles.docTitle}>Análise Comparativa D&amp;O</div>
+                </div>
+                <div className={styles.docSeal}>
+                  <svg className={styles.docSealIcon} viewBox="0 0 24 24">
+                    <polyline points="4 12 9 17 20 7" />
+                  </svg>
+                </div>
+              </div>
+
+              <div className={styles.docBody}>
+                <div className={styles.docSection}>
+                  <div className={styles.docSectionTitle}>Coberturas</div>
+                  <div className={styles.docLines}>
+                    <div className={`${styles.ln} ${styles.lnDone} ${styles.w100}`} />
+                    <div className={`${styles.ln} ${styles.lnDone} ${styles.w85}`} />
+                    <div className={`${styles.ln} ${styles.lnDone} ${styles.w70}`} />
+                    <div className={`${styles.ln} ${styles.lnDone} ${styles.w90}`} />
+                  </div>
+                </div>
+
+                <div className={styles.docSection}>
+                  <div className={styles.docSectionTitle}>Franquias &amp; Sublimites</div>
+                  <div className={styles.docLines}>
+                    <div className={`${styles.ln} ${styles.lnDone} ${styles.w100}`} />
+                    <div className={`${styles.ln} ${styles.lnDone} ${styles.w55}`} />
+                    <div className={`${styles.ln} ${styles.lnDone} ${styles.w85}`} />
+                  </div>
+                </div>
+
+                <div className={styles.docSection}>
+                  <div className={styles.docSectionTitle}>Condições Especiais</div>
+                  <div className={styles.docLines}>
+                    <div className={`${styles.ln} ${styles.lnDone} ${styles.w100}`} />
+                    <div className={`${styles.ln} ${styles.lnDone} ${styles.w70}`} />
+                    <div className={`${styles.ln} ${styles.lnPlain} ${styles.w40}`} />
+                  </div>
+                </div>
+              </div>
+
+              <div className={styles.docSign}>
+                <div className={styles.signLeft}>Analise_DO.html</div>
+                <div className={styles.signStamp}>Verificado · Turya</div>
+              </div>
+
+              <div className={styles.fold} />
+            </div>
+
+            <div className={styles.compShadow} />
+          </div>
+        </div>
       </div>
-    </section>
+    </div>
   );
 };
 

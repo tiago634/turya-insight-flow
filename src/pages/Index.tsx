@@ -187,8 +187,8 @@ const Index = () => {
           />
         )}
 
-        {appState === "completed" && htmlBlob && (
-          <DownloadReport htmlBlob={htmlBlob} onReset={handleReset} />
+        {appState === "completed" && (
+          <DownloadReport onReset={handleReset} />
         )}
 
         {appState === "error" && (
