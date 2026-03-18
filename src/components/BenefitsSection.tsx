@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
 import { Zap, BarChart3, Brain } from "lucide-react";
 
 const getIcon = (type: "zap" | "chart" | "brain") => {
@@ -70,6 +71,60 @@ type Footer =
   | { kind: "dual"; top: string; bottom: string };
 
 const BenefitsSection = () => {
+  const timerRef = useRef<HTMLDivElement | null>(null);
+  const [shouldRunTimer, setShouldRunTimer] = useState(false);
+  const [progress, setProgress] = useState(0); // 0..1 (progresso SIMULADO)
+
+  // Para a demo não ficar “literal” (4h reais), aceleramos:
+  // em ~12s o timer da Turya vai de 5:00 -> 0:00 e o manual desce só um pouco (diferença fica clara).
+  const TURYA_TOTAL_MS = 5 * 60 * 1000;
+  const MANUAL_TOTAL_MS = 4 * 60 * 60 * 1000;
+  const DEMO_DURATION_MS = 12_000;
+
+  useEffect(() => {
+    const el = timerRef.current;
+    if (!el) return;
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        const isInView = entries.some((e) => e.isIntersecting);
+        if (!isInView) return;
+
+        // Respeita acessibilidade: se o usuário preferir menos animações, mantém estático.
+        const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+        if (!reduced) setShouldRunTimer(true);
+
+        io.disconnect();
+      },
+      { threshold: 0.35 }
+    );
+
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!shouldRunTimer) return;
+
+    let raf = 0;
+    const start = performance.now();
+
+    const tick = (now: number) => {
+      const elapsed = now - start;
+      const p = Math.min(1, elapsed / DEMO_DURATION_MS);
+      setProgress(p);
+
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [shouldRunTimer]);
+
+  const simElapsedMs = progress * TURYA_TOTAL_MS;
+  const turyaRemainingMs = Math.max(0, TURYA_TOTAL_MS - simElapsedMs);
+  const manualRemainingMs = Math.max(0, MANUAL_TOTAL_MS - simElapsedMs);
+
   return (
     <section id="beneficios" className="py-24 relative">
       <div className="absolute inset-0 bg-radial-glow opacity-30" />
@@ -149,11 +204,57 @@ const BenefitsSection = () => {
           </div>
 
           <div className="w-full md:w-[260px] rounded-2xl border border-border/50 bg-background/40 px-8 py-6 text-center">
-            <div className="text-4xl md:text-5xl font-bold text-gradient-warm">
-              5 min
-            </div>
-            <div className="text-xs md:text-sm font-semibold text-muted-foreground uppercase mt-1">
-              VS HORAS DE TRABALHO MANUAL
+            <div ref={timerRef} className="w-full">
+              <div className="text-xs md:text-sm font-semibold text-muted-foreground uppercase">
+                Comparativo de tempo (demo)
+              </div>
+
+              <div className="mt-3 flex items-start justify-between gap-6">
+                <div className="flex-1">
+                  <div className="text-xs font-semibold text-muted-foreground">
+                    Manual
+                  </div>
+                  <div className="text-3xl font-bold text-gradient-warm leading-tight mt-1">
+                    {formatHHMM(manualRemainingMs)}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-1">
+                    restante estimado
+                  </div>
+                </div>
+
+                <div className="flex-1">
+                  <div className="text-xs font-semibold text-muted-foreground">
+                    Turya
+                  </div>
+                  <div className="text-3xl font-bold text-gradient-warm leading-tight mt-1">
+                    {formatMMSS(turyaRemainingMs)}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-1">
+                    para concluir
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>Progresso</span>
+                  <span className="font-semibold">{Math.round(progress * 100)}%</span>
+                </div>
+                <div className="mt-2 h-2 rounded-full bg-border/40 overflow-hidden">
+                  <motion.div
+                    className="h-full bg-gradient-primary"
+                    style={{ width: `${progress * 100}%` }}
+                    transition={{ duration: 0.1 }}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 text-xs text-muted-foreground leading-relaxed">
+                Economia estimada:{" "}
+                <span className="text-gradient-warm font-semibold">
+                  até 3h55m
+                </span>
+              </div>
             </div>
           </div>
         </motion.div>
@@ -187,4 +288,18 @@ function renderFooter(footer: Footer) {
       <div className="text-gradient-warm font-bold mt-1">{footer.bottom}</div>
     </div>
   );
+}
+
+function formatHHMM(ms: number) {
+  const totalMinutes = Math.max(0, Math.floor(ms / 60_000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m`;
+}
+
+function formatMMSS(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
