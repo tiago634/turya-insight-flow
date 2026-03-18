@@ -192,7 +192,9 @@ const BenefitsSection = () => {
         >
           <div className="max-w-2xl">
             <h3 className="text-2xl md:text-3xl font-bold leading-tight mb-4">
-              O corretor que usa a Turya fecha mais, em menos tempo.
+              O corretor que usa a{" "}
+              <span className="text-gradient-warm">Turya</span> fecha mais, em{" "}
+              <span className="text-gradient-warm">menos tempo</span>.
             </h3>
             <p className="text-muted-foreground leading-relaxed">
               Enquanto a concorrência ainda está montando planilhas, você já está
@@ -201,9 +203,9 @@ const BenefitsSection = () => {
             </p>
           </div>
 
-          <div className="w-full md:w-[260px] rounded-2xl border border-border/50 bg-background/40 px-8 py-6 text-center">
+          <div className="w-full md:w-[320px] rounded-2xl border border-border/50 bg-background/40 px-10 py-7 text-center">
             <div ref={timerRef} className="w-full">
-              <div className="text-xs md:text-sm font-semibold text-muted-foreground uppercase">
+              <div className="text-[11px] md:text-xs font-semibold text-muted-foreground uppercase tracking-[0.14em] whitespace-nowrap">
                 Comparativo de tempo (1 análise)
               </div>
 
@@ -216,7 +218,7 @@ const BenefitsSection = () => {
                   <div className="text-xs font-semibold text-muted-foreground">
                     Manual
                   </div>
-                  <div className="text-3xl font-bold text-gradient-warm leading-tight mt-1">
+                  <div className="text-3xl font-bold text-gradient-warm leading-tight mt-1 whitespace-nowrap tabular-nums">
                     {formatHHMM(manualRemainingMs)}
                   </div>
                   <div className="text-[11px] text-muted-foreground mt-1">
@@ -228,7 +230,7 @@ const BenefitsSection = () => {
                   <div className="text-xs font-semibold text-muted-foreground">
                     Turya
                   </div>
-                  <div className="text-3xl font-bold text-gradient-warm leading-tight mt-1">
+                  <div className="text-3xl font-bold text-gradient-warm leading-tight mt-1 whitespace-nowrap tabular-nums">
                     {formatMMSS(turyaRemainingMs)}
                   </div>
                   <div className="text-[11px] text-muted-foreground mt-1">
@@ -275,7 +277,7 @@ const BenefitsSection = () => {
 
               <div className="mt-4 text-xs text-muted-foreground leading-relaxed">
                 Economia estimada (1 análise):{" "}
-                <span className="text-gradient-warm font-semibold">
+                <span className="text-gradient-warm font-semibold whitespace-nowrap">
                   até 3h55m
                 </span>
               </div>
