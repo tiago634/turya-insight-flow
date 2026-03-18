@@ -203,33 +203,33 @@ const BenefitsSection = () => {
             </p>
           </div>
 
-          <div className="w-full md:w-[320px] rounded-2xl border border-border/50 bg-background/40 px-10 py-7 text-center">
+          <div className="w-full md:w-[420px] rounded-2xl border border-border/50 bg-background/40 px-12 py-8 text-center">
             <div ref={timerRef} className="w-full">
-              <div className="text-[11px] md:text-xs font-semibold text-muted-foreground uppercase tracking-[0.14em] whitespace-nowrap">
+              <div className="w-full text-[11px] md:text-xs font-semibold text-muted-foreground uppercase tracking-[0.14em] whitespace-nowrap text-center">
                 Comparativo de tempo (1 análise)
               </div>
 
-              <div className="mt-3 flex items-center justify-between gap-6 w-full">
-                <div className="flex-[1.3]">
-                  <div className="text-xs font-semibold text-muted-foreground text-center">
+              <div className="mt-3 grid grid-cols-[1.3fr_1fr] items-center justify-items-center gap-6 w-full">
+                <div className="text-center">
+                  <div className="text-xs font-semibold text-muted-foreground text-center w-full">
                     Manual
                   </div>
-                  <div className="text-3xl font-bold text-gradient-warm leading-tight mt-1 whitespace-nowrap tabular-nums text-center">
+                  <div className="text-3xl font-bold text-gradient-warm leading-tight mt-1 whitespace-nowrap tabular-nums text-center font-mono">
                     {formatHHMM(manualRemainingMs)}
                   </div>
-                  <div className="text-[11px] text-muted-foreground mt-1 text-center">
+                  <div className="text-[11px] text-muted-foreground mt-1 text-center w-full">
                     restante estimado
                   </div>
                 </div>
 
-                <div className="flex-1">
-                  <div className="text-xs font-semibold text-muted-foreground text-center">
+                <div className="text-center">
+                  <div className="text-xs font-semibold text-muted-foreground text-center w-full">
                     Turya
                   </div>
-                  <div className="text-3xl font-bold text-gradient-warm leading-tight mt-1 whitespace-nowrap tabular-nums text-center">
+                  <div className="text-3xl font-bold text-gradient-warm leading-tight mt-1 whitespace-nowrap tabular-nums text-center font-mono">
                     {formatMMSS(turyaRemainingMs)}
                   </div>
-                  <div className="text-[11px] text-muted-foreground mt-1 text-center">
+                  <div className="text-[11px] text-muted-foreground mt-1 text-center w-full">
                     para concluir
                   </div>
                 </div>
