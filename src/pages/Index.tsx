@@ -172,7 +172,7 @@ const Index = () => {
   }
 
   if (appState === "completed") {
-    return <DownloadReport onReset={handleReset} />;
+    return <DownloadReport htmlBlob={htmlBlob} onReset={handleReset} />;
   }
 
   return (

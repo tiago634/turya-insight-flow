@@ -7,12 +7,22 @@ interface DownloadResult {
 
 interface DownloadReportProps {
   onReset: () => void;
+  /** Quando o relatório vem do polling (backend), o Index passa o Blob. Senão usa localStorage/query. */
+  htmlBlob?: Blob | null;
 }
 
-const DownloadReport = ({ onReset }: DownloadReportProps) => {
+const DownloadReport = ({ onReset, htmlBlob }: DownloadReportProps) => {
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   useEffect(() => {
+    if (htmlBlob && htmlBlob.size > 0) {
+      const url = URL.createObjectURL(htmlBlob);
+      setDownloadUrl(url);
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    }
+
     function getResult(): DownloadResult {
       try {
         const s = localStorage.getItem("turya_result");
@@ -28,7 +38,7 @@ const DownloadReport = ({ onReset }: DownloadReportProps) => {
     if (result.downloadUrl && result.downloadUrl !== "#") {
       setDownloadUrl(result.downloadUrl);
     }
-  }, []);
+  }, [htmlBlob]);
 
   const handleNewQuotes = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
@@ -37,6 +47,7 @@ const DownloadReport = ({ onReset }: DownloadReportProps) => {
 
   const href = downloadUrl ?? "#";
   const isValidUrl = !!downloadUrl && downloadUrl !== "#";
+  const isBlobUrl = downloadUrl?.startsWith("blob:") ?? false;
 
   return (
     <div className={styles.wrapper}>
@@ -89,8 +100,8 @@ const DownloadReport = ({ onReset }: DownloadReportProps) => {
               id="btnDownload"
               className={styles.btnDl}
               href={href}
-              target={isValidUrl ? "_blank" : undefined}
-              rel={isValidUrl ? "noreferrer" : undefined}
+              target={isValidUrl && !isBlobUrl ? "_blank" : undefined}
+              rel={isValidUrl && !isBlobUrl ? "noreferrer" : undefined}
               download={isValidUrl ? "Analise_DO.html" : undefined}
             >
               Baixar relatório
