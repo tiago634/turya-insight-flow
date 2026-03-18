@@ -11,6 +11,7 @@ const TermsOfUseModal = ({ open, onAccept, onCancel }: TermsOfUseModalProps) => 
   const [checked, setChecked] = useState(false);
   const [hideScrollHint, setHideScrollHint] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  const openedAtRef = useRef<number>(0);
 
   useEffect(() => {
     if (!open) return;
@@ -23,6 +24,8 @@ const TermsOfUseModal = ({ open, onAccept, onCancel }: TermsOfUseModalProps) => 
     // Prevent background scroll while modal is open.
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+
+    openedAtRef.current = Date.now();
 
     return () => {
       document.body.style.overflow = prevOverflow;
@@ -39,6 +42,8 @@ const TermsOfUseModal = ({ open, onAccept, onCancel }: TermsOfUseModalProps) => 
     <div
       className={styles.overlay}
       onMouseDown={(e) => {
+        // Evita fechar automaticamente no mesmo clique que disparou a abertura do modal.
+        if (Date.now() - openedAtRef.current < 250) return;
         if (e.target === e.currentTarget) onCancel();
       }}
       role="presentation"
