@@ -210,30 +210,30 @@ const BenefitsSection = () => {
               </div>
 
               <div className="mt-1 text-[11px] text-muted-foreground">
-                Para 1 cotação D&amp;O
+                para 1 cotação
               </div>
 
-              <div className="mt-3 flex items-start justify-between gap-6">
-                <div className="flex-1">
-                  <div className="text-xs font-semibold text-muted-foreground">
+              <div className="mt-3 flex items-center justify-between gap-6 w-full">
+                <div className="flex-[1.3]">
+                  <div className="text-xs font-semibold text-muted-foreground text-center">
                     Manual
                   </div>
-                  <div className="text-3xl font-bold text-gradient-warm leading-tight mt-1 whitespace-nowrap tabular-nums">
+                  <div className="text-3xl font-bold text-gradient-warm leading-tight mt-1 whitespace-nowrap tabular-nums text-center">
                     {formatHHMM(manualRemainingMs)}
                   </div>
-                  <div className="text-[11px] text-muted-foreground mt-1">
+                  <div className="text-[11px] text-muted-foreground mt-1 text-center">
                     restante estimado
                   </div>
                 </div>
 
                 <div className="flex-1">
-                  <div className="text-xs font-semibold text-muted-foreground">
+                  <div className="text-xs font-semibold text-muted-foreground text-center">
                     Turya
                   </div>
-                  <div className="text-3xl font-bold text-gradient-warm leading-tight mt-1 whitespace-nowrap tabular-nums">
+                  <div className="text-3xl font-bold text-gradient-warm leading-tight mt-1 whitespace-nowrap tabular-nums text-center">
                     {formatMMSS(turyaRemainingMs)}
                   </div>
-                  <div className="text-[11px] text-muted-foreground mt-1">
+                  <div className="text-[11px] text-muted-foreground mt-1 text-center">
                     para concluir
                   </div>
                 </div>
@@ -248,7 +248,7 @@ const BenefitsSection = () => {
                         {Math.round(manualProgress * 100)}%
                       </span>
                     </div>
-                    <div className="mt-2 h-2 rounded-full bg-border/40 overflow-hidden">
+                    <div className="mt-2 h-2 rounded-full bg-border/40 overflow-hidden mx-auto">
                       <motion.div
                         className="h-full bg-gradient-primary"
                         style={{ width: `${manualProgress * 100}%` }}
@@ -264,7 +264,7 @@ const BenefitsSection = () => {
                         {Math.round(turyaProgress * 100)}%
                       </span>
                     </div>
-                    <div className="mt-2 h-2 rounded-full bg-border/40 overflow-hidden">
+                    <div className="mt-2 h-2 rounded-full bg-border/40 overflow-hidden mx-auto">
                       <motion.div
                         className="h-full bg-gradient-primary"
                         style={{ width: `${turyaProgress * 100}%` }}
