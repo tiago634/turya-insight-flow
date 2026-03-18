@@ -209,10 +209,6 @@ const BenefitsSection = () => {
                 Comparativo de tempo (1 análise)
               </div>
 
-              <div className="mt-1 text-[11px] text-muted-foreground">
-                para 1 cotação
-              </div>
-
               <div className="mt-3 flex items-center justify-between gap-6 w-full">
                 <div className="flex-[1.3]">
                   <div className="text-xs font-semibold text-muted-foreground text-center">
