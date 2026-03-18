@@ -9,7 +9,7 @@ const Footer = () => {
           <motion.img
             src={turyaLogo}
             alt="Turya"
-            className="h-8 w-auto opacity-80 hover:opacity-100 transition-opacity"
+            className="h-6 w-auto opacity-80 hover:opacity-100 transition-opacity"
             whileHover={{ scale: 1.02 }}
           />
           
