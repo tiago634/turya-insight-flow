@@ -143,7 +143,7 @@ const BenefitsSection = () => {
             <span className="text-gradient-warm">minutos</span>.
           </h2>
           <p className="text-muted-foreground max-w-3xl mx-auto text-base md:text-lg">
-            Corretores perdem em média 4 horas por cotação D&amp;O comparando
+            Corretores perdem em média 4 horas por análise D&amp;O comparando
             manualmente cláusula por cláusula. A Turya elimina esse gargalo, sem
             perder rigor técnico.
           </p>
