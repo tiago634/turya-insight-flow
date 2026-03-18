@@ -1,4 +1,8 @@
-const Footer = () => {
+interface FooterProps {
+  onOpenTerms?: () => void;
+}
+
+const Footer = ({ onOpenTerms }: FooterProps) => {
   return (
     <footer className="py-12 border-t border-border/50">
       <div className="container mx-auto px-6">
@@ -7,14 +11,12 @@ const Footer = () => {
             <a
               href="#"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              onClick={(e) => {
+                e.preventDefault();
+                onOpenTerms?.();
+              }}
             >
               Termos de Uso
-            </a>
-            <a
-              href="#"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Privacidade
             </a>
           </div>
           

@@ -49,6 +49,12 @@ const Index = () => {
     termsResolverRef.current = null;
   };
 
+  const handleOpenTermsFromFooter = () => {
+    // Abre o modal para leitura.
+    // Se o usuário concordar, o aceite será aplicado da mesma forma do primeiro upload.
+    setTermsOpen(true);
+  };
+
   const checkAnalysisStatus = async (sessionId: string) => {
     try {
       // Query param evita cache do navegador (304) e garante resposta sempre atual
@@ -227,7 +233,7 @@ const Index = () => {
         <BenefitsSection />
       </main>
 
-      <Footer />
+      <Footer onOpenTerms={handleOpenTermsFromFooter} />
     </div>
   );
 };
