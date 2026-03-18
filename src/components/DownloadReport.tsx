@@ -45,6 +45,22 @@ const DownloadReport = ({ onReset, htmlBlob }: DownloadReportProps) => {
     onReset();
   };
 
+  const handleDownload = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!downloadUrl || downloadUrl === "#") {
+      e.preventDefault();
+      return;
+    }
+    if (downloadUrl.startsWith("blob:")) {
+      e.preventDefault();
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = "Analise_DO.html";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  };
+
   const href = downloadUrl ?? "#";
   const isValidUrl = !!downloadUrl && downloadUrl !== "#";
   const isBlobUrl = downloadUrl?.startsWith("blob:") ?? false;
@@ -103,6 +119,7 @@ const DownloadReport = ({ onReset, htmlBlob }: DownloadReportProps) => {
               target={isValidUrl && !isBlobUrl ? "_blank" : undefined}
               rel={isValidUrl && !isBlobUrl ? "noreferrer" : undefined}
               download={isValidUrl ? "Analise_DO.html" : undefined}
+              onClick={handleDownload}
             >
               Baixar relatório
               <svg className={styles.btnDlIcon} viewBox="0 0 24 24">
