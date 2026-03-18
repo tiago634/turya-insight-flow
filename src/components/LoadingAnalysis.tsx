@@ -2,12 +2,12 @@ import { useState, useEffect } from "react";
 import styles from "./LoadingAnalysis.module.css";
 
 const CLAUSES = [
-  "Cláusula 3.1 — Cobertura Principal",
-  "Cláusula 4.2 — Limite de Responsabilidade",
-  "Cláusula 5.0 — Franquia Mínima",
-  "Cláusula 6.3 — Exclusões Específicas",
-  "Cláusula 7.1 — Retroatividade",
-  "Cláusula 8.4 — Condições Especiais",
+  "Cláusula 3.1: Cobertura Principal",
+  "Cláusula 4.2: Limite de Responsabilidade",
+  "Cláusula 5.0: Franquia Mínima",
+  "Cláusula 6.3: Exclusões Específicas",
+  "Cláusula 7.1: Retroatividade",
+  "Cláusula 8.4: Condições Especiais",
 ];
 
 interface LoadingAnalysisProps {
@@ -72,7 +72,7 @@ const LoadingAnalysis = ({ sessionId, statusCheckUrl }: LoadingAnalysisProps) =>
             atenção.
           </h1>
           <p className={styles.bodyText}>
-            Seus documentos estão sendo revisados em profundidade — coberturas, franquias, sublimites e condições especiais.
+            Seus documentos estão sendo revisados em profundidade: coberturas, franquias, sublimites e condições especiais.
           </p>
           <div className={styles.progressArea}>
             <div className={styles.progressLineWrap}>

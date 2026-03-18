@@ -28,17 +28,17 @@ const benefits = [
     iconType: "chart" as const,
     title: "Rigor cláusula por cláusula",
     description:
-      "A IA lê coberturas, sublimites, franquias, retroatividade de exclusões específicas de cada seguradora — e formaliza tudo em taxonomia padronizada para comparação real.",
+      "A IA lê coberturas, sublimites, franquias, retroatividade de exclusões específicas de cada seguradora e formaliza tudo em taxonomia padronizada para comparação real.",
     footer: {
       kind: "highlight",
-      text: "Nenhuma cláusula passa despercebida — nem as que prejudicam o seguro",
+      text: "Nenhuma cláusula passa despercebida, nem as que prejudicam o seguro",
     },
   },
   {
     iconType: "brain" as const,
     title: "Relatório pronto para o cliente",
     description:
-      "O relatório HTML gerado é visualmente profissional — e permite entrega ao cliente algo que nenhum concorrente consegue produzir na mesma velocidade.",
+      "O relatório HTML gerado é visualmente profissional e permite entrega ao cliente algo que nenhum concorrente consegue produzir na mesma velocidade.",
     footer: {
       kind: "dual",
       top: "Diferencial competitivo",
@@ -49,19 +49,19 @@ const benefits = [
     iconType: "zap" as const,
     title: "Análise padronizada, sempre",
     description:
-      "Toda análise gerada segue o mesmo critério técnico — independente de quem fez o upload. Sem variação de qualidade entre analistas, sem interpretações divergentes entre atendimentos.",
+      "Toda análise gerada segue o mesmo critério técnico, independente de quem fez o upload. Sem variação de qualidade entre analistas, sem interpretações divergentes entre atendimentos.",
   },
   {
     iconType: "chart" as const,
     title: "Escala sem aumentar equipe",
     description:
-      "Com a Turya, um corretor sozinho consegue processar o volume de análises que antes exigia uma equipe técnica dedicada — sem contratar, sem terceirizar.",
+      "Com a Turya, um corretor sozinho consegue processar o volume de análises que antes exigia uma equipe técnica dedicada, sem contratar, sem terceirizar.",
   },
   {
     iconType: "brain" as const,
     title: "Treinado para o mercado brasileiro",
     description:
-      "A IA conhece as particularidades do D&O brasileiro — determina limitações das seguradoras locais, estruturas de franquia, regionais e os padrões de cobertura do mercado nacional.",
+      "A IA conhece as particularidades do D&O brasileiro, determina limitações das seguradoras locais, estruturas de franquia, regionais e os padrões de cobertura do mercado nacional.",
   },
 ];
 
@@ -73,13 +73,10 @@ type Footer =
 const BenefitsSection = () => {
   const timerRef = useRef<HTMLDivElement | null>(null);
   const [shouldRunTimer, setShouldRunTimer] = useState(false);
-  const [progress, setProgress] = useState(0); // 0..1 (progresso SIMULADO)
+  const [elapsedMs, setElapsedMs] = useState(0); // tempo real desde que o card entrou na tela
 
-  // Para a demo não ficar “literal” (4h reais), aceleramos:
-  // em ~12s o timer da Turya vai de 5:00 -> 0:00 e o manual desce só um pouco (diferença fica clara).
   const TURYA_TOTAL_MS = 5 * 60 * 1000;
   const MANUAL_TOTAL_MS = 4 * 60 * 60 * 1000;
-  const DEMO_DURATION_MS = 12_000;
 
   useEffect(() => {
     const el = timerRef.current;
@@ -110,20 +107,21 @@ const BenefitsSection = () => {
     const start = performance.now();
 
     const tick = (now: number) => {
-      const elapsed = now - start;
-      const p = Math.min(1, elapsed / DEMO_DURATION_MS);
-      setProgress(p);
+      const elapsed = Math.min(MANUAL_TOTAL_MS, now - start);
+      setElapsedMs(elapsed);
 
-      if (p < 1) raf = requestAnimationFrame(tick);
+      if (elapsed < MANUAL_TOTAL_MS) raf = requestAnimationFrame(tick);
     };
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [shouldRunTimer]);
 
-  const simElapsedMs = progress * TURYA_TOTAL_MS;
-  const turyaRemainingMs = Math.max(0, TURYA_TOTAL_MS - simElapsedMs);
-  const manualRemainingMs = Math.max(0, MANUAL_TOTAL_MS - simElapsedMs);
+  const turyaRemainingMs = Math.max(0, TURYA_TOTAL_MS - elapsedMs);
+  const manualRemainingMs = Math.max(0, MANUAL_TOTAL_MS - elapsedMs);
+
+  const turyaProgress = Math.min(1, elapsedMs / TURYA_TOTAL_MS);
+  const manualProgress = Math.min(1, elapsedMs / MANUAL_TOTAL_MS);
 
   return (
     <section id="beneficios" className="py-24 relative">
@@ -146,7 +144,7 @@ const BenefitsSection = () => {
           </h2>
           <p className="text-muted-foreground max-w-3xl mx-auto text-base md:text-lg">
             Corretores perdem em média 4 horas por cotação D&amp;O comparando
-            manualmente cláusula por cláusula. A Turya elimina esse gargalo — sem
+            manualmente cláusula por cláusula. A Turya elimina esse gargalo, sem
             perder rigor técnico.
           </p>
         </motion.div>
@@ -198,7 +196,7 @@ const BenefitsSection = () => {
             </h3>
             <p className="text-muted-foreground leading-relaxed">
               Enquanto a concorrência ainda está montando planilhas, você já está
-              apresentando o relatório — e ganhando a confiança do cliente com
+              apresentando o relatório, e ganhando a confiança do cliente com
               profissionalismo que eles nunca viram antes.
             </p>
           </div>
@@ -206,7 +204,11 @@ const BenefitsSection = () => {
           <div className="w-full md:w-[260px] rounded-2xl border border-border/50 bg-background/40 px-8 py-6 text-center">
             <div ref={timerRef} className="w-full">
               <div className="text-xs md:text-sm font-semibold text-muted-foreground uppercase">
-                Comparativo de tempo (demo)
+                Comparativo de tempo (1 análise)
+              </div>
+
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                Para 1 cotação D&amp;O
               </div>
 
               <div className="mt-3 flex items-start justify-between gap-6">
@@ -236,21 +238,43 @@ const BenefitsSection = () => {
               </div>
 
               <div className="mt-4">
-                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                  <span>Progresso</span>
-                  <span className="font-semibold">{Math.round(progress * 100)}%</span>
-                </div>
-                <div className="mt-2 h-2 rounded-full bg-border/40 overflow-hidden">
-                  <motion.div
-                    className="h-full bg-gradient-primary"
-                    style={{ width: `${progress * 100}%` }}
-                    transition={{ duration: 0.1 }}
-                  />
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>Manual (4h reais)</span>
+                      <span className="font-semibold">
+                        {Math.round(manualProgress * 100)}%
+                      </span>
+                    </div>
+                    <div className="mt-2 h-2 rounded-full bg-border/40 overflow-hidden">
+                      <motion.div
+                        className="h-full bg-gradient-primary"
+                        style={{ width: `${manualProgress * 100}%` }}
+                        transition={{ duration: 0.1 }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>Turya (5min reais)</span>
+                      <span className="font-semibold">
+                        {Math.round(turyaProgress * 100)}%
+                      </span>
+                    </div>
+                    <div className="mt-2 h-2 rounded-full bg-border/40 overflow-hidden">
+                      <motion.div
+                        className="h-full bg-gradient-primary"
+                        style={{ width: `${turyaProgress * 100}%` }}
+                        transition={{ duration: 0.1 }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
               <div className="mt-4 text-xs text-muted-foreground leading-relaxed">
-                Economia estimada:{" "}
+                Economia estimada (1 análise):{" "}
                 <span className="text-gradient-warm font-semibold">
                   até 3h55m
                 </span>

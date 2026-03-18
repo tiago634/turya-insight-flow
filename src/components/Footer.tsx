@@ -19,7 +19,7 @@ const Footer = () => {
           </div>
           
           <p className="text-sm text-muted-foreground">
-            © 2026 Turya — Inteligência para Seguros
+            © 2026 Turya | Inteligência para Seguros
           </p>
         </div>
       </div>
