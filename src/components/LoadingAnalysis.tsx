@@ -48,19 +48,6 @@ const LoadingAnalysis = ({ sessionId, statusCheckUrl }: LoadingAnalysisProps) =>
     <div className={styles.wrapper}>
       <div className={styles.noise} aria-hidden />
 
-      <nav className={styles.nav}>
-        <div className={styles.logo}>
-          <div className={styles.logoMark}>
-            <svg viewBox="0 0 20 20">
-              <circle cx="10" cy="10" r="7" fill="none" stroke="#fff" strokeWidth="2" />
-              <circle cx="10" cy="10" r="2.5" fill="#fff" />
-            </svg>
-          </div>
-          <span className={styles.logoName}>turya</span>
-        </div>
-        <div className={styles.navR}>D&O · Análise inteligente</div>
-      </nav>
-
       <div className={styles.page}>
         <div className={styles.left}>
           <div className={styles.eyebrow}>Análise D&O em andamento</div>
