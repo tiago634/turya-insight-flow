@@ -13,7 +13,7 @@ const Header = () => {
         <motion.img
           src={turyaLogo}
           alt="Turya - Inteligência Artificial"
-          className="h-24 md:h-[7.5rem] w-auto"
+          className="h-12 md:h-[3.75rem] w-auto"
           whileHover={{ scale: 1.02 }}
           transition={{ type: "spring", stiffness: 400 }}
         />
