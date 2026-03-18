@@ -5,11 +5,14 @@
 }
 
 .card {
+  /* Match the "card-elevated" gradient from index.css */
   background: linear-gradient(
     135deg,
-    rgba(22, 25, 31, 0.92) 0%,
-    rgba(17, 19, 24, 0.92) 100%
+    hsl(210 11% 10% / 0.8) 0%,
+    hsl(210 11% 5% / 0.9) 100%
   );
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-card);
   border: 1px solid rgba(255, 255, 255, 0.055);
   border-radius: 16px;
   padding: 26px;
