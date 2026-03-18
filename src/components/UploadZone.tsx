@@ -15,6 +15,9 @@ interface UploadZoneProps {
   onError: (message: string) => void;
   onStartProcessing: (sessionId: string) => void;
   sessionId: string | null;
+  /** Controle de aceite dos Termos: deve ocorrer apenas na primeira tentativa desta sessão */
+  termsAccepted: boolean;
+  onRequestTerms: () => Promise<boolean>;
 }
 
 const MAX_FILES = 10;
@@ -28,11 +31,19 @@ const WEBHOOK_INPUT_URL = `${WEBHOOK_SERVER_URL}/api/send-to-n8n`;
 const WEBHOOK_OUTPUT_URL = `${WEBHOOK_SERVER_URL}/webhook/result`;
 const TIMEOUT_MS = 10 * 60 * 1000; // 10 minutos (n8n pode demorar para processar)
 
-const UploadZone = ({ onSuccess, onError, onStartProcessing, sessionId }: UploadZoneProps) => {
+const UploadZone = ({
+  onSuccess,
+  onError,
+  onStartProcessing,
+  sessionId,
+  termsAccepted,
+  onRequestTerms,
+}: UploadZoneProps) => {
   const [files, setFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isWaitingTerms, setIsWaitingTerms] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const validateFile = (file: File): string | null => {
@@ -119,8 +130,20 @@ const UploadZone = ({ onSuccess, onError, onStartProcessing, sessionId }: Upload
       return;
     }
 
-    setIsSubmitting(true);
     setError(null);
+
+    // Primeiro envio desta sessão: precisa aceitar os termos.
+    if (!termsAccepted) {
+      try {
+        setIsWaitingTerms(true);
+        const ok = await onRequestTerms();
+        if (!ok) return;
+      } finally {
+        setIsWaitingTerms(false);
+      }
+    }
+
+    setIsSubmitting(true);
 
     // Gerar session_id único para esta análise
     const newSessionId = crypto.randomUUID();
@@ -376,10 +399,15 @@ const UploadZone = ({ onSuccess, onError, onStartProcessing, sessionId }: Upload
                 <Button
                   type="submit"
                   size="lg"
-                  disabled={files.length === 0 || isSubmitting}
+                  disabled={files.length === 0 || isSubmitting || isWaitingTerms}
                   className="w-full gap-2"
                 >
-                  {isSubmitting ? (
+                  {isWaitingTerms ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Confirmando termos...
+                    </>
+                  ) : isSubmitting ? (
                     <>
                       <Loader2 className="w-5 h-5 animate-spin" />
                       Enviando...

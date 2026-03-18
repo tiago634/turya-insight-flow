@@ -4,6 +4,7 @@ import HeroSection from "@/components/HeroSection";
 import UploadZone from "@/components/UploadZone";
 import LoadingAnalysis from "@/components/LoadingAnalysis";
 import DownloadReport from "@/components/DownloadReport";
+import TermsOfUseModal from "@/components/TermsOfUseModal";
 import ErrorMessage from "@/components/ErrorMessage";
 import BenefitsSection from "@/components/BenefitsSection";
 import Footer from "@/components/Footer";
@@ -22,6 +23,31 @@ const Index = () => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const pollingIntervalRef = useRef<number | null>(null);
   const pollingStartTimeRef = useRef<number | null>(null);
+
+  // Termos: mostram apenas na primeira tentativa desta sessão (e re-aparecem após refresh).
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
+  const termsResolverRef = useRef<((val: boolean) => void) | null>(null);
+
+  const requestTermsAcceptance = () => {
+    setTermsOpen(true);
+    return new Promise<boolean>((resolve) => {
+      termsResolverRef.current = resolve;
+    });
+  };
+
+  const handleAcceptTerms = () => {
+    setTermsAccepted(true);
+    setTermsOpen(false);
+    termsResolverRef.current?.(true);
+    termsResolverRef.current = null;
+  };
+
+  const handleCancelTerms = () => {
+    setTermsOpen(false);
+    termsResolverRef.current?.(false);
+    termsResolverRef.current = null;
+  };
 
   const checkAnalysisStatus = async (sessionId: string) => {
     try {
@@ -178,6 +204,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
+      <TermsOfUseModal open={termsOpen} onAccept={handleAcceptTerms} onCancel={handleCancelTerms} />
 
       <main>
         <HeroSection />
@@ -188,6 +215,8 @@ const Index = () => {
             onError={handleError}
             onStartProcessing={handleStartProcessing}
             sessionId={sessionId}
+            termsAccepted={termsAccepted}
+            onRequestTerms={requestTermsAcceptance}
           />
         )}
 
