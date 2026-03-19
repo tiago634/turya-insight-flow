@@ -245,9 +245,9 @@ const BenefitsSection = () => {
               </svg>
             </div>
 
-            <div className={bentoStyles.cardTitle}>Rigor cláusula por cláusula</div>
+            <div className={bentoStyles.cardTitle}>Rigor cotação por cotação</div>
             <div className={bentoStyles.cardText}>
-              Na verdade, a IA lê coberturas, franquias e prêmios, trazendo insights valiosos e deep research de ferramentas para o corretor.
+              A IA lê coberturas, franquias e prêmios, trazendo insights valiosos e deep research de ferramentas para o corretor.
             </div>
             <div className={bentoStyles.quoteBox}>Nenhuma cláusula passa despercebida, nem as que prejudicam o seguro</div>
           </motion.div>
