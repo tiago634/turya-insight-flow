@@ -81,7 +81,7 @@ const BenefitsSection = () => {
           </p>
         </motion.div>
 
-        <div className={`${bentoStyles.bento} mb-0`}>
+        <div className={`${bentoStyles.bento} mb-16`}>
           {/* C1 — Velocidade */}
           <motion.div
             className={`${bentoStyles.card} ${bentoStyles.c1}`}
@@ -248,10 +248,11 @@ const BenefitsSection = () => {
             <div className={bentoStyles.cardTitle}>Rigor cotação por cotação</div>
             <div className={bentoStyles.cardText}>
               A IA lê coberturas, franquias e prêmios, trazendo insights valiosos e deep research de ferramentas para o corretor.
+              Organiza as evidências para comparação clara entre cotações.
             </div>
             <div className={bentoStyles.pill}>
               <span className={bentoStyles.pillDot} aria-hidden />
-              insights para revisão rápida
+              critérios consistentes em cada cotação
             </div>
             <div className={bentoStyles.quoteBox}>Nenhuma cláusula passa despercebida, nem as que prejudicam o seguro</div>
           </motion.div>
