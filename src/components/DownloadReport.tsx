@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import styles from "./DownloadReport.module.css";
+import turyaLogo from "@/assets/turya-logo.png";
 
 interface DownloadResult {
   downloadUrl?: string;
@@ -68,6 +69,13 @@ const DownloadReport = ({ onReset, htmlBlob }: DownloadReportProps) => {
   return (
     <div className={styles.wrapper}>
       <div className={styles.noise} aria-hidden />
+      <div className={styles.brandWrap}>
+        <img
+          src={turyaLogo}
+          alt="Turya - Inteligência Artificial"
+          className={styles.brandLogo}
+        />
+      </div>
 
       <div className={styles.scene}>
         <div className={styles.centerLine} />

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import styles from "./LoadingAnalysis.module.css";
+import turyaLogo from "@/assets/turya-logo.png";
 
 const CLAUSES = [
   "Cláusula 3.1: Cobertura Principal",
@@ -47,6 +48,13 @@ const LoadingAnalysis = ({ sessionId, statusCheckUrl }: LoadingAnalysisProps) =>
   return (
     <div className={styles.wrapper}>
       <div className={styles.noise} aria-hidden />
+      <div className={styles.brandWrap}>
+        <img
+          src={turyaLogo}
+          alt="Turya - Inteligência Artificial"
+          className={styles.brandLogo}
+        />
+      </div>
 
       <div className={styles.page}>
         <div className={styles.left}>

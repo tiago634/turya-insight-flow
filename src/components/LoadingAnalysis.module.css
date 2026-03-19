@@ -23,6 +23,19 @@
   opacity: 0.03;
 }
 
+.brandWrap {
+  position: fixed;
+  top: 16px;
+  left: 24px;
+  z-index: 100;
+}
+
+.brandLogo {
+  height: 48px;
+  width: auto;
+  display: block;
+}
+
 .nav {
   position: fixed;
   top: 0;
@@ -69,6 +82,17 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+@media (min-width: 768px) {
+  .brandWrap {
+    top: 12px;
+    left: 24px;
+  }
+
+  .brandLogo {
+    height: 60px;
+  }
 }
 
 .page {
