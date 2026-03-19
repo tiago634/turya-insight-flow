@@ -247,7 +247,7 @@ const BenefitsSection = () => {
 
             <div className={bentoStyles.cardTitle}>Rigor cláusula por cláusula</div>
             <div className={bentoStyles.cardText}>
-              A IA lê coberturas, sublimites, franquias, retroatividade de exclusões específicas de cada seguradora e formaliza tudo em taxonomia padronizada para comparação real.
+              Na verdade, a IA lê coberturas, franquias e prêmios, trazendo insights valiosos e deep research de ferramentas para o corretor.
             </div>
             <div className={bentoStyles.quoteBox}>Nenhuma cláusula passa despercebida, nem as que prejudicam o seguro</div>
           </motion.div>
