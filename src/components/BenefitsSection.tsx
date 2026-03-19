@@ -81,7 +81,7 @@ const BenefitsSection = () => {
           </p>
         </motion.div>
 
-        <div className={`${bentoStyles.bento} mb-16`}>
+        <div className={`${bentoStyles.bento} mb-0`}>
           {/* C1 — Velocidade */}
           <motion.div
             className={`${bentoStyles.card} ${bentoStyles.c1}`}
