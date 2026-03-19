@@ -249,6 +249,10 @@ const BenefitsSection = () => {
             <div className={bentoStyles.cardText}>
               A IA lê coberturas, franquias e prêmios, trazendo insights valiosos e deep research de ferramentas para o corretor.
             </div>
+            <div className={bentoStyles.pill}>
+              <span className={bentoStyles.pillDot} aria-hidden />
+              insights para revisão rápida
+            </div>
             <div className={bentoStyles.quoteBox}>Nenhuma cláusula passa despercebida, nem as que prejudicam o seguro</div>
           </motion.div>
 
