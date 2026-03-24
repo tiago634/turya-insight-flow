@@ -10,10 +10,19 @@ interface DownloadReportProps {
   onReset: () => void;
   /** Quando o relatório vem do polling (backend), o Index passa o Blob. Senão usa localStorage/query. */
   htmlBlob?: Blob | null;
+  /** Arquivo complementar opcional (ex: Analise_Turya_XLSX) */
+  secondaryFileBlob?: Blob | null;
+  secondaryFileName?: string;
 }
 
-const DownloadReport = ({ onReset, htmlBlob }: DownloadReportProps) => {
+const DownloadReport = ({
+  onReset,
+  htmlBlob,
+  secondaryFileBlob,
+  secondaryFileName = "Analise_Turya_XLSX",
+}: DownloadReportProps) => {
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [secondaryDownloadUrl, setSecondaryDownloadUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (htmlBlob && htmlBlob.size > 0) {
@@ -41,6 +50,17 @@ const DownloadReport = ({ onReset, htmlBlob }: DownloadReportProps) => {
     }
   }, [htmlBlob]);
 
+  useEffect(() => {
+    if (secondaryFileBlob && secondaryFileBlob.size > 0) {
+      const url = URL.createObjectURL(secondaryFileBlob);
+      setSecondaryDownloadUrl(url);
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    }
+    setSecondaryDownloadUrl(null);
+  }, [secondaryFileBlob]);
+
   const handleNewQuotes = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
     onReset();
@@ -62,9 +82,27 @@ const DownloadReport = ({ onReset, htmlBlob }: DownloadReportProps) => {
     }
   };
 
+  const handleSecondaryDownload = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!secondaryDownloadUrl || secondaryDownloadUrl === "#") {
+      e.preventDefault();
+      return;
+    }
+    if (secondaryDownloadUrl.startsWith("blob:")) {
+      e.preventDefault();
+      const a = document.createElement("a");
+      a.href = secondaryDownloadUrl;
+      a.download = secondaryFileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  };
+
   const href = downloadUrl ?? "#";
   const isValidUrl = !!downloadUrl && downloadUrl !== "#";
   const isBlobUrl = downloadUrl?.startsWith("blob:") ?? false;
+  const secondaryHref = secondaryDownloadUrl ?? "#";
+  const hasSecondaryFile = !!secondaryDownloadUrl && secondaryDownloadUrl !== "#";
 
   return (
     <div className={styles.wrapper}>
@@ -114,6 +152,21 @@ const DownloadReport = ({ onReset, htmlBlob }: DownloadReportProps) => {
                 <path d="M12 15V3M12 15l-4-4M12 15l4-4M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17" />
               </svg>
             </a>
+
+            {hasSecondaryFile && (
+              <a
+                id="btnDownloadSecondary"
+                className={styles.btnNew}
+                href={secondaryHref}
+                download={secondaryFileName}
+                onClick={handleSecondaryDownload}
+              >
+                <svg className={styles.btnNewIcon} viewBox="0 0 24 24">
+                  <path d="M12 15V3M12 15l-4-4M12 15l4-4M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17" />
+                </svg>
+                Baixar {secondaryFileName}
+              </a>
+            )}
 
             <a href="#" className={styles.btnNew} onClick={handleNewQuotes}>
               <svg className={styles.btnNewIcon} viewBox="0 0 24 24">

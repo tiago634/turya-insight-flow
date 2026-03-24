@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+ import { useState, useEffect, useRef } from "react";
 import Header from "@/components/Header";
 import HeroSection from "@/components/HeroSection";
 import UploadZone from "@/components/UploadZone";
@@ -19,6 +19,8 @@ const STATUS_CHECK_URL = import.meta.env.VITE_WEBHOOK_SERVER_URL || "http://loca
 const Index = () => {
   const [appState, setAppState] = useState<AppState>("upload");
   const [htmlBlob, setHtmlBlob] = useState<Blob | null>(null);
+  const [secondaryFileBlob, setSecondaryFileBlob] = useState<Blob | null>(null);
+  const [secondaryFileName, setSecondaryFileName] = useState<string>("Analise_Turya_XLSX");
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const pollingIntervalRef = useRef<number | null>(null);
@@ -66,7 +68,7 @@ const Index = () => {
       }
 
       const text = await response.text();
-      let data: { status?: string; html_content?: string; error?: string };
+      let data: Record<string, unknown>;
       try {
         data = JSON.parse(text);
       } catch (parseErr) {
@@ -74,11 +76,13 @@ const Index = () => {
         return;
       }
 
-      const hasHtml = !!(data.html_content && data.html_content.length > 0);
-      const isCompleted = data.status === "completed" || (hasHtml && data.status !== "error");
+      const htmlContent = typeof data.html_content === "string" ? data.html_content : "";
+      const status = typeof data.status === "string" ? data.status : undefined;
+      const hasHtml = htmlContent.length > 0;
+      const isCompleted = status === "completed" || (hasHtml && status !== "error");
       if (isCompleted && hasHtml) {
         try {
-          const binaryString = atob(data.html_content!);
+          const binaryString = atob(htmlContent);
           const bytes = new Uint8Array(binaryString.length);
           for (let i = 0; i < binaryString.length; i++) {
             bytes[i] = binaryString.charCodeAt(i);
@@ -88,6 +92,11 @@ const Index = () => {
             clearInterval(pollingIntervalRef.current);
             pollingIntervalRef.current = null;
           }
+
+          const secondary = extractSecondarySpreadsheet(data);
+          setSecondaryFileBlob(secondary?.blob ?? null);
+          setSecondaryFileName(secondary?.fileName ?? "Analise_Turya_XLSX");
+
           setHtmlBlob(blob);
           setAppState("completed");
           window.scrollTo({ top: 0, behavior: "smooth" });
@@ -97,21 +106,23 @@ const Index = () => {
         return;
       }
 
-      if (data.status === "error") {
+      if (status === "error") {
         // Parar polling
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current);
           pollingIntervalRef.current = null;
         }
         
-        setErrorMessage(data.error || "Erro ao processar análise");
+        setErrorMessage(
+          typeof data.error === "string" ? data.error : "Erro ao processar análise"
+        );
         setAppState("error");
         window.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
 
-      if (data.status === "processing" && !hasHtml) {
-        console.log("Polling:", data.status, "| backend:", STATUS_CHECK_URL);
+      if (status === "processing" && !hasHtml) {
+        console.log("Polling:", status, "| backend:", STATUS_CHECK_URL);
       }
     } catch (error) {
       console.error("Erro ao verificar status:", error);
@@ -163,6 +174,8 @@ const Index = () => {
       pollingIntervalRef.current = null;
     }
     
+    setSecondaryFileBlob(null);
+    setSecondaryFileName("Analise_Turya_XLSX");
     setHtmlBlob(blob);
     setAppState("completed");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -189,6 +202,8 @@ const Index = () => {
     
     setAppState("upload");
     setHtmlBlob(null);
+    setSecondaryFileBlob(null);
+    setSecondaryFileName("Analise_Turya_XLSX");
     setErrorMessage("");
     setSessionId(null);
     pollingStartTimeRef.current = null;
@@ -204,7 +219,14 @@ const Index = () => {
   }
 
   if (appState === "completed") {
-    return <DownloadReport htmlBlob={htmlBlob} onReset={handleReset} />;
+    return (
+      <DownloadReport
+        htmlBlob={htmlBlob}
+        secondaryFileBlob={secondaryFileBlob}
+        secondaryFileName={secondaryFileName}
+        onReset={handleReset}
+      />
+    );
   }
 
   return (
@@ -239,3 +261,40 @@ const Index = () => {
 };
 
 export default Index;
+
+function extractSecondarySpreadsheet(data: Record<string, unknown>): { blob: Blob; fileName: string } | null {
+  const candidateKeys = [
+    "Analise_Turya_XLSX",
+    "analise_turya_xlsx",
+    "xlsx_content",
+    "excel_content",
+    "excel_base64",
+    "secondary_file_content",
+    "arquivo_extra_content",
+  ];
+
+  for (const key of candidateKeys) {
+    const value = data[key];
+    if (typeof value !== "string" || !value.trim()) continue;
+    try {
+      const blob = base64ToBlob(value.trim(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      return { blob, fileName: "Analise_Turya_XLSX" };
+    } catch {
+      // try next key
+    }
+  }
+
+  return null;
+}
+
+function base64ToBlob(base64: string, mimeType: string): Blob {
+  const normalized = base64.startsWith("data:")
+    ? base64.substring(base64.indexOf(",") + 1)
+    : base64;
+  const binaryString = atob(normalized);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mimeType });
+}
