@@ -332,6 +332,13 @@
   stroke-width: 1.5;
 }
 
+.xlsxHint {
+  font-size: 11px;
+  line-height: 1.6;
+  color: rgba(232, 228, 221, 0.55);
+  margin-top: -2px;
+}
+
 .colRight {
   flex: 1;
   display: flex;

@@ -154,18 +154,25 @@ const DownloadReport = ({
             </a>
 
             {hasSecondaryFile && (
-              <a
-                id="btnDownloadSecondary"
-                className={styles.btnNew}
-                href={secondaryHref}
-                download={secondaryFileName}
-                onClick={handleSecondaryDownload}
-              >
-                <svg className={styles.btnNewIcon} viewBox="0 0 24 24">
-                  <path d="M12 15V3M12 15l-4-4M12 15l4-4M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17" />
-                </svg>
-                Baixar {secondaryFileName}
-              </a>
+              <>
+                <a
+                  id="btnDownloadSecondary"
+                  className={styles.btnNew}
+                  href={secondaryHref}
+                  download={secondaryFileName}
+                  onClick={handleSecondaryDownload}
+                >
+                  <svg className={styles.btnNewIcon} viewBox="0 0 24 24">
+                    <path d="M12 15V3M12 15l-4-4M12 15l4-4M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17" />
+                  </svg>
+                  Baixar Análise XLSX
+                </a>
+                <p className={styles.xlsxHint}>
+                  Este arquivo XLSX é editável e contém a base da análise. Para
+                  visualizar insights valiosos da cotação e tecnologias acopladas
+                  como deep research, baixe a análise principal.
+                </p>
+              </>
             )}
 
             <a href="#" className={styles.btnNew} onClick={handleNewQuotes}>
