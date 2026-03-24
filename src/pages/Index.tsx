@@ -94,6 +94,14 @@ const Index = () => {
           }
 
           const secondary = extractSecondarySpreadsheet(data);
+          if (import.meta.env.DEV) {
+            console.log(
+              "[Turya] Polling concluído. Arquivo secundário:",
+              secondary ? `${secondary.fileName} (${secondary.blob.size} bytes)` : "não encontrado no JSON",
+              "| chaves no topo:",
+              Object.keys(data)
+            );
+          }
           setSecondaryFileBlob(secondary?.blob ?? null);
           setSecondaryFileName(secondary?.fileName ?? "Analise_Turya_XLSX");
 
@@ -263,38 +271,203 @@ const Index = () => {
 export default Index;
 
 function extractSecondarySpreadsheet(data: Record<string, unknown>): { blob: Blob; fileName: string } | null {
-  const candidateKeys = [
+  const defaultFileName = "Analise_Turya_XLSX";
+
+  const directKeyCandidates = [
     "Analise_Turya_XLSX",
+    "Analise_Turya_XLSX.xls",
     "analise_turya_xlsx",
+    "analise_turya_xls",
     "xlsx_content",
+    "xls_content",
     "excel_content",
     "excel_base64",
+    "spreadsheet_base64",
     "secondary_file_content",
     "arquivo_extra_content",
+    "secondary_file_base64",
+    "excel_file",
   ];
 
-  for (const key of candidateKeys) {
-    const value = data[key];
-    if (typeof value !== "string" || !value.trim()) continue;
-    try {
-      const blob = base64ToBlob(value.trim(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      return { blob, fileName: "Analise_Turya_XLSX" };
-    } catch {
-      // try next key
+  // 1) Tenta chaves diretas conhecidas.
+  for (const key of directKeyCandidates) {
+    const v = data[key];
+    if (typeof v === "string" && v.trim()) {
+      const decoded = decodeSpreadsheetFromBase64String(v.trim(), defaultFileName);
+      if (decoded) return decoded;
     }
   }
 
+  // 2) Busca recursiva por objetos com filename + conteúdo base64.
+  const queue: unknown[] = [data];
+  const visited = new Set<unknown>();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || typeof current !== "object") continue;
+    if (visited.has(current)) continue;
+    visited.add(current);
+
+    if (Array.isArray(current)) {
+      for (const item of current) queue.push(item);
+      continue;
+    }
+
+    const obj = current as Record<string, unknown>;
+
+    const fileName = getFirstString(
+      obj,
+      ["fileName", "filename", "name", "arquivo", "output_name"],
+      defaultFileName
+    );
+    const normalizedFileName = fileName.toLowerCase();
+
+    // Conteúdos comuns: planilha pode vir como XLS (OLE) ou XLSX (ZIP).
+    for (const contentKey of [
+      "content",
+      "base64",
+      "data",
+      "file",
+      "value",
+      "xlsx",
+      "xls",
+      "buffer",
+      "binary",
+      "payload",
+    ]) {
+      const value = obj[contentKey];
+      if (typeof value !== "string" || !value.trim()) continue;
+
+      const looksLikeSpreadsheetName =
+        normalizedFileName.includes("xlsx") ||
+        normalizedFileName.includes("xls") ||
+        normalizedFileName.includes("analise_turya") ||
+        normalizedFileName.includes("excel");
+
+      const shouldTryAsSpreadsheet =
+        looksLikeSpreadsheetName ||
+        contentKey === "xlsx" ||
+        contentKey === "xls";
+
+      if (shouldTryAsSpreadsheet) {
+        const decoded = decodeSpreadsheetFromBase64String(value.trim(), fileName);
+        if (decoded) return decoded;
+      }
+
+      const decoded = decodeSpreadsheetFromBase64String(value.trim(), defaultFileName);
+      if (decoded) return decoded;
+    }
+
+    // Explora recursivamente.
+    for (const v of Object.values(obj)) {
+      if (typeof v === "object" && v !== null) queue.push(v);
+    }
+  }
+
+  // 3) Último recurso: qualquer string longa em base64 que decodifique para XLS/XLSX (chaves imprevistas no backend).
+  const loose = findSpreadsheetInUnknownStrings(data);
+  return loose;
+}
+
+/** XLSX (OOXML) começa com PK (ZIP). XLS (Excel 97-2003) começa com assinatura OLE. */
+function detectSpreadsheetFromBytes(bytes: Uint8Array): { mime: string; fileName: string } | null {
+  if (bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b) {
+    return {
+      mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      fileName: "Analise_Turya_XLSX.xlsx",
+    };
+  }
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0xd0 &&
+    bytes[1] === 0xcf &&
+    bytes[2] === 0x11 &&
+    bytes[3] === 0xe0
+  ) {
+    return {
+      mime: "application/vnd.ms-excel",
+      fileName: "Analise_Turya_XLSX.xls",
+    };
+  }
   return null;
 }
 
-function base64ToBlob(base64: string, mimeType: string): Blob {
-  const normalized = base64.startsWith("data:")
-    ? base64.substring(base64.indexOf(",") + 1)
-    : base64;
-  const binaryString = atob(normalized);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+function normalizeBase64Payload(value: string): string {
+  let s = value.trim().replace(/\s/g, "");
+  if (s.startsWith("data:")) {
+    const i = s.indexOf("base64,");
+    if (i !== -1) s = s.slice(i + 7);
+    else {
+      const comma = s.indexOf(",");
+      if (comma !== -1) s = s.slice(comma + 1);
+    }
   }
-  return new Blob([bytes], { type: mimeType });
+  const pad = s.length % 4;
+  if (pad) s += "=".repeat(4 - pad);
+  return s;
+}
+
+function decodeSpreadsheetFromBase64String(
+  value: string,
+  preferredName: string
+): { blob: Blob; fileName: string } | null {
+  try {
+    if (/^https?:\/\//i.test(value)) return null;
+    const normalized = normalizeBase64Payload(value);
+    const binaryString = atob(normalized);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const detected = detectSpreadsheetFromBytes(bytes);
+    if (!detected) return null;
+    const name =
+      preferredName && preferredName !== "Analise_Turya_XLSX"
+        ? preferredName
+        : detected.fileName;
+    return { blob: new Blob([bytes], { type: detected.mime }), fileName: name };
+  } catch {
+    return null;
+  }
+}
+
+function findSpreadsheetInUnknownStrings(root: unknown): { blob: Blob; fileName: string } | null {
+  const queue: unknown[] = [root];
+  const visited = new Set<unknown>();
+  const minLen = 200;
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current === null || current === undefined) continue;
+    if (typeof current === "string") {
+      if (current.length < minLen) continue;
+      const decoded = decodeSpreadsheetFromBase64String(current, "Analise_Turya_XLSX");
+      if (decoded) return decoded;
+      continue;
+    }
+    if (typeof current !== "object") continue;
+    if (visited.has(current)) continue;
+    visited.add(current);
+
+    if (Array.isArray(current)) {
+      for (const item of current) queue.push(item);
+      continue;
+    }
+    for (const v of Object.values(current as Record<string, unknown>)) {
+      queue.push(v);
+    }
+  }
+  return null;
+}
+
+function getFirstString(
+  obj: Record<string, unknown>,
+  keys: string[],
+  fallback: string
+): string {
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return fallback;
 }

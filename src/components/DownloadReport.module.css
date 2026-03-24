@@ -324,6 +324,10 @@
   border-color: rgba(255, 255, 255, 0.15);
 }
 
+.btnDisabled {
+  opacity: 0.5;
+}
+
 .btnNewIcon {
   width: 12px;
   height: 12px;
