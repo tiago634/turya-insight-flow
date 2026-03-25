@@ -57,6 +57,23 @@ async function storeKeys() {
   return Array.from(memoryMap.keys());
 }
 
+/** Após base64, distingue HTML principal de planilha (n8n pode enviar os dois em POSTs separados no mesmo campo). */
+function detectPayloadKindFromBase64(base64Str) {
+  if (!base64Str || typeof base64Str !== 'string') return 'unknown';
+  try {
+    const normalized = base64Str.replace(/^data:.*,/, '').trim();
+    const buf = Buffer.from(normalized, 'base64');
+    if (buf.length < 4) return 'unknown';
+    if (buf[0] === 0x50 && buf[1] === 0x4b) return 'xlsx';
+    if (buf.length >= 8 && buf[0] === 0xd0 && buf[1] === 0xcf && buf[2] === 0x11 && buf[3] === 0xe0) return 'xls';
+    const head = buf.slice(0, Math.min(256, buf.length)).toString('utf8').trimStart();
+    if (head.startsWith('<!') || head.startsWith('<html') || head.startsWith('<HTML')) return 'html';
+    return 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
 // Limite de body grande para receber HTML em base64 ou arquivo no /webhook/result
 const BODY_LIMIT = '50mb';
 
@@ -141,12 +158,24 @@ app.post('/api/send-to-n8n', upload.any(), async (req, res) => {
         if (sessionId && (contentType.includes('text/html') || contentType.includes('application/octet-stream'))) {
           const buf = await response.arrayBuffer();
           const base64 = Buffer.from(buf).toString('base64');
-          storeSet(sessionId, {
-            session_id: sessionId,
-            html_content: base64,
-            status: 'completed',
-            received_at: new Date().toISOString()
-          }).catch(e => console.error('storeSet error:', e));
+          storeGet(sessionId)
+            .then((existing) => {
+              const ex = existing || {};
+              const merged = {
+                session_id: sessionId,
+                status: 'completed',
+                received_at: new Date().toISOString(),
+                html_content: base64,
+                xlsx_content: ex.xlsx_content || null,
+                Analise_Turya_XLSX: ex.Analise_Turya_XLSX || null,
+                error: ex.error
+              };
+              if (ex.html_content && ex.html_content.length > base64.length) {
+                merged.html_content = ex.html_content;
+              }
+              return storeSet(sessionId, merged);
+            })
+            .catch(e => console.error('storeSet error:', e));
           console.log('✅ Resultado gravado para session_id:', sessionId, '(Respond to Webhook)');
         } else if (sessionId) {
           const text = await response.text();
@@ -217,19 +246,42 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
       error = req.body.error;
     }
 
-    // Verificar se veio como arquivo (multipart)
+    let spreadsheetFromFiles = null;
+
     if (req.files && req.files.length > 0) {
-      const htmlFile = req.files.find(f => 
-        f.fieldname === 'html_file' || 
-        f.fieldname === 'html' || 
-        f.fieldname === 'data' ||
-        f.originalname.endsWith('.html')
-      );
-      
-      if (htmlFile) {
-        htmlContent = htmlFile.buffer.toString('base64');
+      for (const f of req.files) {
+        const b64 = f.buffer.toString('base64');
+        const name = (f.originalname || '').toLowerCase();
+        const field = (f.fieldname || '').toLowerCase();
+        const hintedSheet =
+          field.includes('xls') ||
+          field.includes('xlsx') ||
+          field.includes('excel') ||
+          field.includes('spreadsheet') ||
+          name.endsWith('.xlsx') ||
+          name.endsWith('.xls') ||
+          name.includes('analise_turya');
+        const hintedHtml =
+          name.endsWith('.html') || field === 'html_file' || field === 'html' || field === 'data';
+
+        if (hintedSheet) {
+          spreadsheetFromFiles = b64;
+        } else if (hintedHtml) {
+          htmlContent = b64;
+        } else {
+          const k = detectPayloadKindFromBase64(b64);
+          if (k === 'xlsx' || k === 'xls') spreadsheetFromFiles = b64;
+          else if (k === 'html') htmlContent = b64;
+          else if (!htmlContent) htmlContent = b64;
+          else if (detectPayloadKindFromBase64(htmlContent) === 'html') spreadsheetFromFiles = b64;
+          else htmlContent = b64;
+        }
       }
     }
+
+    if (req.body.xlsx_content) spreadsheetFromFiles = req.body.xlsx_content;
+    if (req.body.xls_content) spreadsheetFromFiles = req.body.xls_content;
+    if (req.body.Analise_Turya_XLSX) spreadsheetFromFiles = req.body.Analise_Turya_XLSX;
 
     // Verificar session_id nos campos do FormData
     if (!sessionId && req.body) {
@@ -253,37 +305,70 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
     console.log(`🔑 session_id recebido do n8n: ${sessionId}`);
     console.log(`🔑 O frontend DEVE estar fazendo polling com este mesmo ID. Se a tela mostrar outro ID, corrija no n8n a expressão do campo session_id no nó HTTP Request (use o primeiro Webhook: $('NomeDoWebhook').first().json.body.session_id).`);
 
-    // Nunca aceitar resultado sem HTML: o frontend só exibe quando tem html_content
-    if (!htmlContent || (typeof htmlContent === 'string' && htmlContent.length === 0)) {
-      console.error('❌ Nenhum HTML recebido. Content-Type:', req.headers['content-type']);
+    // Campo "html_content" pode trazer na verdade XLS/XLSX (segundo POST do n8n)
+    if (htmlContent) {
+      const k = detectPayloadKindFromBase64(htmlContent);
+      if (k === 'xlsx' || k === 'xls') {
+        spreadsheetFromFiles = htmlContent;
+        htmlContent = null;
+      }
+    }
+
+    const existing = (await storeGet(sessionId)) || {};
+
+    const merged = {
+      session_id: sessionId,
+      status: status || existing.status || 'completed',
+      error: error !== undefined && error !== null ? error : existing.error,
+      received_at: new Date().toISOString(),
+      html_content: existing.html_content || null,
+      xlsx_content: existing.xlsx_content || null,
+      Analise_Turya_XLSX: existing.Analise_Turya_XLSX || null
+    };
+
+    if (htmlContent && typeof htmlContent === 'string' && htmlContent.length > 0) {
+      const k = detectPayloadKindFromBase64(htmlContent);
+      if (k === 'html') {
+        if (!merged.html_content || htmlContent.length > merged.html_content.length) {
+          merged.html_content = htmlContent;
+        }
+      } else if (k === 'xlsx' || k === 'xls') {
+        merged.xlsx_content = htmlContent;
+        merged.Analise_Turya_XLSX = htmlContent;
+      }
+    }
+
+    if (spreadsheetFromFiles && typeof spreadsheetFromFiles === 'string' && spreadsheetFromFiles.length > 0) {
+      merged.xlsx_content = spreadsheetFromFiles;
+      merged.Analise_Turya_XLSX = spreadsheetFromFiles;
+    }
+
+    if (!merged.html_content || merged.html_content.length === 0) {
+      console.error('❌ Nenhum HTML armazenado após merge. Content-Type:', req.headers['content-type']);
       console.error('❌ req.files:', req.files?.length ?? 0, req.files ? req.files.map(f => ({ field: f.fieldname, size: f.size })) : []);
       console.error('❌ req.body keys:', Object.keys(req.body || {}));
       return res.status(400).json({
         success: false,
-        error: 'Arquivo HTML não recebido',
-        hint: 'Use Body Content Type "Form-Data" (não "n8n Binary File") com DOIS parâmetros: 1) session_id (texto), 2) data (tipo File, Input Data Field Name = "data").'
+        error: 'Arquivo HTML não recebido (ou ainda não enviado em POST anterior)',
+        hint: 'O primeiro POST deve enviar o HTML principal. Planilhas em POSTs seguintes são mescladas sem apagar o HTML.'
       });
     }
 
-    // Armazenar resultado (Redis compartilhado entre instâncias no Railway)
-    await storeSet(sessionId, {
-      session_id: sessionId,
-      html_content: htmlContent,
-      status: status,
-      error: error,
-      received_at: new Date().toISOString()
-    });
+    await storeSet(sessionId, merged);
 
-    console.log(`✅ Resultado salvo para session_id: ${sessionId}`);
-    console.log(`   Status: ${status}`);
-    console.log(`   HTML size: ${htmlContent.length} bytes (frontend vai receber no polling)`);
+    const htmlLen = merged.html_content ? merged.html_content.length : 0;
+    const sheetLen = merged.xlsx_content ? merged.xlsx_content.length : 0;
+    console.log(`✅ Resultado salvo (merge) para session_id: ${sessionId}`);
+    console.log(`   Status: ${merged.status}`);
+    console.log(`   HTML base64 length: ${htmlLen} | Planilha base64 length: ${sheetLen || '(nenhuma ainda)'}`);
     if (redisClient) console.log(`   Store: Redis (key ${PREFIX}${sessionId})`);
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       session_id: sessionId,
       message: 'Resultado recebido com sucesso',
-      html_received_bytes: htmlContent.length
+      html_received_bytes: htmlLen,
+      spreadsheet_received_bytes: sheetLen
     });
 
   } catch (error) {
@@ -336,13 +421,20 @@ app.get('/api/analysis/:sessionId', async (req, res) => {
   }
 
   const hasHtml = !!(result.html_content && result.html_content.length > 0);
-  console.log(`✅ Polling: resultado encontrado para session_id ${sessionId}, hasHtml: ${hasHtml}, html_content length: ${result.html_content?.length ?? 0}`);
+  const sheetB64 = result.xlsx_content || result.Analise_Turya_XLSX || null;
+  const hasSheet = !!(sheetB64 && sheetB64.length > 0);
+  console.log(
+    `✅ Polling: session_id ${sessionId}, hasHtml: ${hasHtml}, html length: ${result.html_content?.length ?? 0}` +
+      (hasSheet ? `, planilha length: ${sheetB64.length}` : ', sem planilha no store')
+  );
 
-  // Resposta normalizada: frontend espera status "completed" e html_content (base64)
+  // Resposta: html_content + campos que o frontend usa para extrair XLS/XLSX
   const payload = {
     session_id: result.session_id || sessionId,
     status: hasHtml ? 'completed' : (result.status || 'processing'),
     html_content: result.html_content || null,
+    xlsx_content: result.xlsx_content || null,
+    Analise_Turya_XLSX: result.Analise_Turya_XLSX || result.xlsx_content || null,
     error: result.error || null,
     received_at: result.received_at || null
   };
