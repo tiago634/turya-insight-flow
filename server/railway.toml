@@ -1,0 +1,11 @@
+# Usado quando o serviço Railway tem "Root Directory" = server (pasta deste arquivo).
+# A ligação GitHub ↔ Railway é feita no painel (Settings → Source), não por arquivo.
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "npm start"
+healthcheckPath = "/health"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
