@@ -248,33 +248,47 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
 
     let spreadsheetFromFiles = null;
 
+    // n8n costuma usar o mesmo nome de campo "data" para HTML e para XLS: NÃO assumir que "data" é HTML.
     if (req.files && req.files.length > 0) {
       for (const f of req.files) {
         const b64 = f.buffer.toString('base64');
         const name = (f.originalname || '').toLowerCase();
         const field = (f.fieldname || '').toLowerCase();
-        const hintedSheet =
-          field.includes('xls') ||
-          field.includes('xlsx') ||
-          field.includes('excel') ||
-          field.includes('spreadsheet') ||
+        const magic = detectPayloadKindFromBase64(b64);
+        const byNameSheet =
           name.endsWith('.xlsx') ||
           name.endsWith('.xls') ||
           name.includes('analise_turya');
-        const hintedHtml =
-          name.endsWith('.html') || field === 'html_file' || field === 'html' || field === 'data';
+        const byFieldSheet =
+          field.includes('xls') ||
+          field.includes('xlsx') ||
+          field.includes('excel') ||
+          field.includes('spreadsheet');
+        const isSheet = byNameSheet || byFieldSheet || magic === 'xlsx' || magic === 'xls';
+        const isHtml =
+          name.endsWith('.html') ||
+          field === 'html_file' ||
+          field === 'html' ||
+          magic === 'html';
 
-        if (hintedSheet) {
+        if (isSheet) {
           spreadsheetFromFiles = b64;
-        } else if (hintedHtml) {
+        } else if (isHtml) {
           htmlContent = b64;
-        } else {
-          const k = detectPayloadKindFromBase64(b64);
-          if (k === 'xlsx' || k === 'xls') spreadsheetFromFiles = b64;
-          else if (k === 'html') htmlContent = b64;
+        } else if (field === 'data' || field === 'file' || field === 'attachment') {
+          if (magic === 'html') htmlContent = b64;
+          else if (magic === 'xlsx' || magic === 'xls') spreadsheetFromFiles = b64;
           else if (!htmlContent) htmlContent = b64;
-          else if (detectPayloadKindFromBase64(htmlContent) === 'html') spreadsheetFromFiles = b64;
-          else htmlContent = b64;
+          else spreadsheetFromFiles = b64;
+        } else {
+          if (magic === 'xlsx' || magic === 'xls') spreadsheetFromFiles = b64;
+          else if (magic === 'html') htmlContent = b64;
+          else if (!htmlContent) htmlContent = b64;
+          else if (htmlContent && detectPayloadKindFromBase64(htmlContent) === 'html') {
+            spreadsheetFromFiles = b64;
+          } else {
+            htmlContent = b64;
+          }
         }
       }
     }
@@ -343,15 +357,25 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
       merged.Analise_Turya_XLSX = spreadsheetFromFiles;
     }
 
-    if (!merged.html_content || merged.html_content.length === 0) {
-      console.error('❌ Nenhum HTML armazenado após merge. Content-Type:', req.headers['content-type']);
+    const hasHtmlAfter = !!(merged.html_content && merged.html_content.length > 0);
+    const hasSheetAfter = !!(merged.xlsx_content && merged.xlsx_content.length > 0);
+
+    if (!hasHtmlAfter && !hasSheetAfter) {
+      console.error('❌ Nenhum arquivo útil após merge. Content-Type:', req.headers['content-type']);
       console.error('❌ req.files:', req.files?.length ?? 0, req.files ? req.files.map(f => ({ field: f.fieldname, size: f.size })) : []);
       console.error('❌ req.body keys:', Object.keys(req.body || {}));
       return res.status(400).json({
         success: false,
-        error: 'Arquivo HTML não recebido (ou ainda não enviado em POST anterior)',
-        hint: 'O primeiro POST deve enviar o HTML principal. Planilhas em POSTs seguintes são mescladas sem apagar o HTML.'
+        error: 'Nenhum HTML nem planilha recebidos',
+        hint: 'Envie session_id e o arquivo (multipart ou html_content em base64).'
       });
+    }
+
+    // Só planilha ainda (n8n envia antes do HTML): grava no Redis e mantém processing para o polling continuar.
+    if (!hasHtmlAfter && hasSheetAfter) {
+      merged.status = 'processing';
+    } else if (hasHtmlAfter) {
+      merged.status = status && String(status).length ? status : 'completed';
     }
 
     await storeSet(sessionId, merged);
@@ -428,10 +452,13 @@ app.get('/api/analysis/:sessionId', async (req, res) => {
       (hasSheet ? `, planilha length: ${sheetB64.length}` : ', sem planilha no store')
   );
 
+  // Sem HTML ainda: nunca devolver "completed" (senão o front fecha antes da planilha/HTML final).
+  const effectiveStatus = hasHtml ? 'completed' : 'processing';
+
   // Resposta: html_content + campos que o frontend usa para extrair XLS/XLSX
   const payload = {
     session_id: result.session_id || sessionId,
-    status: hasHtml ? 'completed' : (result.status || 'processing'),
+    status: effectiveStatus,
     html_content: result.html_content || null,
     xlsx_content: result.xlsx_content || null,
     Analise_Turya_XLSX: result.Analise_Turya_XLSX || result.xlsx_content || null,
