@@ -66,12 +66,112 @@ function detectPayloadKindFromBase64(base64Str) {
     if (buf.length < 4) return 'unknown';
     if (buf[0] === 0x50 && buf[1] === 0x4b) return 'xlsx';
     if (buf.length >= 8 && buf[0] === 0xd0 && buf[1] === 0xcf && buf[2] === 0x11 && buf[3] === 0xe0) return 'xls';
-    const head = buf.slice(0, Math.min(256, buf.length)).toString('utf8').trimStart();
+    const head = buf.slice(0, Math.min(512, buf.length)).toString('utf8').trimStart();
     if (head.startsWith('<!') || head.startsWith('<html') || head.startsWith('<HTML')) return 'html';
+    if (head.startsWith('<')) return 'html';
     return 'unknown';
   } catch {
     return 'unknown';
   }
+}
+
+/**
+ * Um único POST multipart pode trazer HTML + XLS com o mesmo fieldname ("data").
+ * Acumulamos candidatos e escolhemos: HTML = base64 mais longo entre os que são HTML;
+ * planilha = por assinatura/nome ou o binário menor quando há dois "data" opacos.
+ */
+function collectWebhookPayloads(req) {
+  const htmlCandidates = [];
+  const sheetCandidates = [];
+  const opaqueParts = [];
+
+  const addSheet = (b64) => {
+    if (b64 && typeof b64 === 'string' && b64.trim()) sheetCandidates.push(b64.trim());
+  };
+  const addHtml = (b64) => {
+    if (b64 && typeof b64 === 'string' && b64.trim()) htmlCandidates.push(b64.trim());
+  };
+
+  if (req.body.html_content) {
+    const k = detectPayloadKindFromBase64(req.body.html_content);
+    if (k === 'xlsx' || k === 'xls') addSheet(req.body.html_content);
+    else addHtml(req.body.html_content);
+  } else if (req.body.htmlContent) {
+    const k = detectPayloadKindFromBase64(req.body.htmlContent);
+    if (k === 'xlsx' || k === 'xls') addSheet(req.body.htmlContent);
+    else addHtml(req.body.htmlContent);
+  }
+  if (req.body.html && typeof req.body.html === 'string' && req.body.html.length > 0) {
+    addHtml(Buffer.from(req.body.html, 'utf8').toString('base64'));
+  }
+
+  addSheet(req.body.xlsx_content);
+  addSheet(req.body.xls_content);
+  addSheet(req.body.Analise_Turya_XLSX);
+
+  for (const f of req.files || []) {
+    const b64 = f.buffer.toString('base64');
+    const name = (f.originalname || '').toLowerCase();
+    const field = (f.fieldname || '').toLowerCase();
+    const kind = detectPayloadKindFromBase64(b64);
+
+    const forceSheet =
+      name.endsWith('.xlsx') ||
+      name.endsWith('.xls') ||
+      name.includes('analise_turya') ||
+      field.includes('xls') ||
+      field.includes('xlsx') ||
+      field.includes('excel') ||
+      field.includes('spreadsheet');
+    const forceHtml = name.endsWith('.html') || field === 'html_file' || field === 'html';
+
+    if (forceSheet) {
+      addSheet(b64);
+      continue;
+    }
+    if (forceHtml) {
+      addHtml(b64);
+      continue;
+    }
+    if (kind === 'xlsx' || kind === 'xls') {
+      addSheet(b64);
+      continue;
+    }
+    if (kind === 'html') {
+      addHtml(b64);
+      continue;
+    }
+
+    // Mesmo fieldname "data" para os dois binários: guardar e decidir depois (maior = HTML, menor = planilha).
+    if (field === 'data' || field === 'file' || field === 'attachment') {
+      opaqueParts.push(b64);
+      continue;
+    }
+
+    if (kind === 'unknown') {
+      opaqueParts.push(b64);
+    } else {
+      addHtml(b64);
+    }
+  }
+
+  if (opaqueParts.length >= 2) {
+    opaqueParts.sort((a, b) => b.length - a.length);
+    addHtml(opaqueParts[0]);
+    addSheet(opaqueParts[1]);
+  } else if (opaqueParts.length === 1) {
+    const one = opaqueParts[0];
+    const k = detectPayloadKindFromBase64(one);
+    if (k === 'xlsx' || k === 'xls') addSheet(one);
+    else if (k === 'html') addHtml(one);
+    else if (one.length > 800000) addHtml(one);
+    else addSheet(one);
+  }
+
+  const htmlContent = htmlCandidates.reduce((best, cur) => (!best || cur.length > best.length ? cur : best), null);
+  const spreadsheetFromFiles = sheetCandidates.length ? sheetCandidates[sheetCandidates.length - 1] : null;
+
+  return { htmlContent, spreadsheetFromFiles, _debug: { nHtmlCand: htmlCandidates.length, nSheetCand: sheetCandidates.length } };
 }
 
 // Limite de body grande para receber HTML em base64 ou arquivo no /webhook/result
@@ -218,24 +318,13 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
     console.log('📥 Content-Type:', req.headers['content-type']);
 
     let sessionId = null;
-    let htmlContent = null;
     let status = 'completed';
     let error = null;
 
-    // Tentar obter dados de diferentes formatos
     if (req.body.session_id) {
       sessionId = req.body.session_id;
     } else if (req.body.sessionId) {
       sessionId = req.body.sessionId;
-    }
-
-    if (req.body.html_content) {
-      htmlContent = req.body.html_content;
-    } else if (req.body.htmlContent) {
-      htmlContent = req.body.htmlContent;
-    } else if (req.body.html) {
-      // Se vier como string HTML, converter para base64
-      htmlContent = Buffer.from(req.body.html).toString('base64');
     }
 
     if (req.body.status) {
@@ -246,56 +335,15 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
       error = req.body.error;
     }
 
-    let spreadsheetFromFiles = null;
-
-    // n8n costuma usar o mesmo nome de campo "data" para HTML e para XLS: NÃO assumir que "data" é HTML.
-    if (req.files && req.files.length > 0) {
-      for (const f of req.files) {
-        const b64 = f.buffer.toString('base64');
-        const name = (f.originalname || '').toLowerCase();
-        const field = (f.fieldname || '').toLowerCase();
-        const magic = detectPayloadKindFromBase64(b64);
-        const byNameSheet =
-          name.endsWith('.xlsx') ||
-          name.endsWith('.xls') ||
-          name.includes('analise_turya');
-        const byFieldSheet =
-          field.includes('xls') ||
-          field.includes('xlsx') ||
-          field.includes('excel') ||
-          field.includes('spreadsheet');
-        const isSheet = byNameSheet || byFieldSheet || magic === 'xlsx' || magic === 'xls';
-        const isHtml =
-          name.endsWith('.html') ||
-          field === 'html_file' ||
-          field === 'html' ||
-          magic === 'html';
-
-        if (isSheet) {
-          spreadsheetFromFiles = b64;
-        } else if (isHtml) {
-          htmlContent = b64;
-        } else if (field === 'data' || field === 'file' || field === 'attachment') {
-          if (magic === 'html') htmlContent = b64;
-          else if (magic === 'xlsx' || magic === 'xls') spreadsheetFromFiles = b64;
-          else if (!htmlContent) htmlContent = b64;
-          else spreadsheetFromFiles = b64;
-        } else {
-          if (magic === 'xlsx' || magic === 'xls') spreadsheetFromFiles = b64;
-          else if (magic === 'html') htmlContent = b64;
-          else if (!htmlContent) htmlContent = b64;
-          else if (htmlContent && detectPayloadKindFromBase64(htmlContent) === 'html') {
-            spreadsheetFromFiles = b64;
-          } else {
-            htmlContent = b64;
-          }
-        }
-      }
-    }
-
-    if (req.body.xlsx_content) spreadsheetFromFiles = req.body.xlsx_content;
-    if (req.body.xls_content) spreadsheetFromFiles = req.body.xls_content;
-    if (req.body.Analise_Turya_XLSX) spreadsheetFromFiles = req.body.Analise_Turya_XLSX;
+    const { htmlContent, spreadsheetFromFiles, _debug } = collectWebhookPayloads(req);
+    console.log(
+      '📊 Coleta (um POST pode ter 2 arquivos):',
+      _debug.nHtmlCand,
+      'candidato(s) HTML,',
+      _debug.nSheetCand,
+      'candidato(s) planilha | files:',
+      req.files?.length ?? 0
+    );
 
     // Verificar session_id nos campos do FormData
     if (!sessionId && req.body) {
