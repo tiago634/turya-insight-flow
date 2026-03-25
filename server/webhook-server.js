@@ -526,10 +526,13 @@ app.delete('/api/analysis/:sessionId', async (req, res) => {
 // Health check
 app.get('/health', async (req, res) => {
   const total = await storeSize();
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'ok',
     timestamp: new Date().toISOString(),
-    stored_results: total
+    stored_results: total,
+    /** No Railway: compare com `git rev-parse HEAD` local após push (confirma deploy). */
+    git_commit: process.env.RAILWAY_GIT_COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT || null,
+    railway_deployment_id: process.env.RAILWAY_DEPLOYMENT_ID || null
   });
 });
 
