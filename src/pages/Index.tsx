@@ -19,6 +19,52 @@ const SECONDARY_FOLLOWUP_MAX_MS = 20_000;
 // URL do servidor local para verificar status
 const STATUS_CHECK_URL = import.meta.env.VITE_WEBHOOK_SERVER_URL || "http://localhost:3001";
 
+/** Diagnóstico sem deploy: ative com ?turya_diag=1, localStorage turya_diag=1, ou no console: window.__TURYA_DIAG__ = true */
+function isTuryaDiagEnabled(): boolean {
+  try {
+    if (import.meta.env.DEV) return true;
+    if (typeof window === "undefined") return false;
+    if (localStorage.getItem("turya_diag") === "1") return true;
+    if (sessionStorage.getItem("turya_diag") === "1") return true;
+    if (new URLSearchParams(window.location.search).get("turya_diag") === "1") return true;
+    return (window as unknown as { __TURYA_DIAG__?: boolean }).__TURYA_DIAG__ === true;
+  } catch {
+    return false;
+  }
+}
+
+function logTuryaPollingDiagnostics(
+  phase: "conclusao" | "followup",
+  backendUrl: string,
+  sessionId: string,
+  data: Record<string, unknown>,
+  secondary: { blob: Blob; fileName: string } | null
+) {
+  const h = data.html_content;
+  const x = data.xlsx_content;
+  const a = data.Analise_Turya_XLSX;
+  const diag = {
+    fase: phase,
+    backend_url_usada: backendUrl,
+    session_id: sessionId,
+    chaves_na_resposta: Object.keys(data),
+    status: data.status,
+    html_content: typeof h === "string" ? `${h.length} chars base64` : "ausente",
+    xlsx_content: typeof x === "string" ? `${x.length} chars base64` : "ausente",
+    Analise_Turya_XLSX: typeof a === "string" ? `${a.length} chars base64` : "ausente",
+  };
+  console.info("[Turya DIAG] Resumo do GET /api/analysis (compare com Railway):", diag);
+  if (secondary) {
+    console.info("[Turya DIAG] Extração secundária:", "OK", secondary.fileName, secondary.blob.size, "bytes");
+  } else {
+    console.warn(
+      "[Turya DIAG] Extração secundária: FALHOU (blob null).",
+      "Se xlsx_content aparece acima com tamanho > 0 e mesmo assim falhou → bug no decode do front.",
+      "Se xlsx_content está ausente → JSON não traz planilha (backend, proxy ou URL errada)."
+    );
+  }
+}
+
 const Index = () => {
   const [appState, setAppState] = useState<AppState>("upload");
   const [htmlBlob, setHtmlBlob] = useState<Blob | null>(null);
@@ -29,6 +75,15 @@ const Index = () => {
   const pollingIntervalRef = useRef<number | null>(null);
   const pollingStartTimeRef = useRef<number | null>(null);
   const secondaryFollowupRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (isTuryaDiagEnabled()) {
+      console.info(
+        "[Turya DIAG] Backend do polling (confira se é o Railway certo):",
+        STATUS_CHECK_URL
+      );
+    }
+  }, []);
 
   // Termos: mostram apenas na primeira tentativa desta sessão (e re-aparecem após refresh).
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -98,7 +153,9 @@ const Index = () => {
           }
 
           const secondary = extractSecondarySpreadsheet(data);
-          if (import.meta.env.DEV) {
+          if (isTuryaDiagEnabled()) {
+            logTuryaPollingDiagnostics("conclusao", STATUS_CHECK_URL, sessionId, data, secondary);
+          } else if (import.meta.env.DEV) {
             console.log(
               "[Turya] Polling concluído. Arquivo secundário:",
               secondary ? `${secondary.fileName} (${secondary.blob.size} bytes)` : "não encontrado no JSON",
@@ -204,6 +261,9 @@ const Index = () => {
           return;
         }
         const secondary = extractSecondarySpreadsheet(data);
+        if (isTuryaDiagEnabled()) {
+          logTuryaPollingDiagnostics("followup", STATUS_CHECK_URL, sessionId, data, secondary);
+        }
         if (secondary?.blob && secondary.blob.size > 0) {
           setSecondaryFileBlob(secondary.blob);
           setSecondaryFileName(secondary.fileName);
