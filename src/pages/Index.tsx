@@ -360,12 +360,14 @@ function extractSecondarySpreadsheet(data: Record<string, unknown>): { blob: Blo
     "excel_file",
   ];
 
-  // 1) Tenta chaves diretas conhecidas.
+  // 1) Tenta chaves diretas conhecidas (backend: xlsx_content / Analise_Turya_XLSX).
   for (const key of directKeyCandidates) {
     const v = data[key];
     if (typeof v === "string" && v.trim()) {
       const decoded = decodeSpreadsheetFromBase64String(v.trim(), defaultFileName);
       if (decoded) return decoded;
+      const trusted = sheetBlobFromTrustedApiBase64(v.trim(), key);
+      if (trusted) return trusted;
     }
   }
 
@@ -440,7 +442,7 @@ function extractSecondarySpreadsheet(data: Record<string, unknown>): { blob: Blo
   return loose;
 }
 
-/** XLSX (OOXML) começa com PK (ZIP). XLS (Excel 97-2003) começa com assinatura OLE. */
+/** XLSX (OOXML) = PK. XLS BIFF = OLE. Alguns .xls são XML Spreadsheet (texto <?xml / <Workbook). */
 function detectSpreadsheetFromBytes(bytes: Uint8Array): { mime: string; fileName: string } | null {
   if (bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b) {
     return {
@@ -460,7 +462,60 @@ function detectSpreadsheetFromBytes(bytes: Uint8Array): { mime: string; fileName
       fileName: "Analise_Turya_XLSX.xls",
     };
   }
+
+  let off = 0;
+  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    off = 3;
+  }
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+    const t = new TextDecoder("utf-16le").decode(bytes.slice(0, Math.min(4096, bytes.length))).trimStart();
+    if (t.startsWith("<?xml") || t.includes("<Workbook") || t.includes("ss:Workbook")) {
+      return { mime: "application/vnd.ms-excel", fileName: "Analise_Turya_XLSX.xls" };
+    }
+  }
+
+  const head = new TextDecoder("utf-8", { fatal: false }).decode(bytes.slice(off, Math.min(4096, bytes.length))).trimStart();
+  if (
+    head.startsWith("<?xml") ||
+    /^<Workbook[\s>]/i.test(head) ||
+    head.includes("<ss:Workbook") ||
+    head.includes("urn:schemas-microsoft-com:office:spreadsheet")
+  ) {
+    return { mime: "application/vnd.ms-excel", fileName: "Analise_Turya_XLSX.xls" };
+  }
+
   return null;
+}
+
+/**
+ * Se o backend já enviou em xlsx_content / Analise_Turya_XLSX mas o binário não bateu nas assinaturas acima,
+ * ainda montamos o download (o servidor já classificou como planilha).
+ */
+function sheetBlobFromTrustedApiBase64(value: string, _apiKey: string): { blob: Blob; fileName: string } | null {
+  try {
+    if (/^https?:\/\//i.test(value)) return null;
+    const normalized = normalizeBase64Payload(value);
+    if (normalized.length < 24) return null;
+    const binaryString = atob(normalized);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    if (bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b) {
+      return {
+        blob: new Blob([bytes], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }),
+        fileName: "Analise_Turya_XLSX.xlsx",
+      };
+    }
+    return {
+      blob: new Blob([bytes], { type: "application/vnd.ms-excel" }),
+      fileName: "Analise_Turya_XLSX.xls",
+    };
+  } catch {
+    return null;
+  }
 }
 
 function normalizeBase64Payload(value: string): string {
