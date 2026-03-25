@@ -13,6 +13,9 @@ type AppState = "upload" | "processing" | "completed" | "error";
 
 const POLLING_INTERVAL = 3000; // 3 segundos
 const MAX_POLLING_TIME = 10 * 60 * 1000; // 10 minutos (tempo máximo de espera pelo resultado)
+/** O backend às vezes grava o XLS/XLSX no Redis pouco depois do HTML; buscamos de novo por alguns segundos. */
+const SECONDARY_FOLLOWUP_MS = 1000;
+const SECONDARY_FOLLOWUP_MAX_MS = 20_000;
 // URL do servidor local para verificar status
 const STATUS_CHECK_URL = import.meta.env.VITE_WEBHOOK_SERVER_URL || "http://localhost:3001";
 
@@ -25,6 +28,7 @@ const Index = () => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const pollingIntervalRef = useRef<number | null>(null);
   const pollingStartTimeRef = useRef<number | null>(null);
+  const secondaryFollowupRef = useRef<number | null>(null);
 
   // Termos: mostram apenas na primeira tentativa desta sessão (e re-aparecem após refresh).
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -169,6 +173,69 @@ const Index = () => {
     };
   }, [appState, sessionId]);
 
+  // Após o HTML estar pronto, o arquivo secundário pode chegar ~1s depois no mesmo endpoint.
+  useEffect(() => {
+    const needsSecondary =
+      appState === "completed" &&
+      !!sessionId &&
+      (!secondaryFileBlob || secondaryFileBlob.size === 0);
+
+    if (!needsSecondary) return;
+
+    const startedAt = Date.now();
+
+    const fetchSecondary = async () => {
+      if (Date.now() - startedAt > SECONDARY_FOLLOWUP_MAX_MS) {
+        if (secondaryFollowupRef.current !== null) {
+          window.clearInterval(secondaryFollowupRef.current);
+          secondaryFollowupRef.current = null;
+        }
+        return;
+      }
+      try {
+        const url = `${STATUS_CHECK_URL}/api/analysis/${sessionId}?t=${Date.now()}`;
+        const response = await fetch(url);
+        if (!response.ok) return;
+        const text = await response.text();
+        let data: Record<string, unknown>;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          return;
+        }
+        const secondary = extractSecondarySpreadsheet(data);
+        if (secondary?.blob && secondary.blob.size > 0) {
+          setSecondaryFileBlob(secondary.blob);
+          setSecondaryFileName(secondary.fileName);
+          if (import.meta.env.DEV) {
+            console.log(
+              "[Turya] Arquivo secundário obtido após HTML:",
+              secondary.fileName,
+              secondary.blob.size,
+              "bytes"
+            );
+          }
+          if (secondaryFollowupRef.current !== null) {
+            window.clearInterval(secondaryFollowupRef.current);
+            secondaryFollowupRef.current = null;
+          }
+        }
+      } catch {
+        /* ignora falhas pontuais */
+      }
+    };
+
+    void fetchSecondary();
+    secondaryFollowupRef.current = window.setInterval(fetchSecondary, SECONDARY_FOLLOWUP_MS);
+
+    return () => {
+      if (secondaryFollowupRef.current !== null) {
+        window.clearInterval(secondaryFollowupRef.current);
+        secondaryFollowupRef.current = null;
+      }
+    };
+  }, [appState, sessionId, secondaryFileBlob]);
+
   const handleStartProcessing = (newSessionId: string) => {
     setSessionId(newSessionId);
     setAppState("processing");
@@ -207,7 +274,11 @@ const Index = () => {
       clearInterval(pollingIntervalRef.current);
       pollingIntervalRef.current = null;
     }
-    
+    if (secondaryFollowupRef.current !== null) {
+      window.clearInterval(secondaryFollowupRef.current);
+      secondaryFollowupRef.current = null;
+    }
+
     setAppState("upload");
     setHtmlBlob(null);
     setSecondaryFileBlob(null);
