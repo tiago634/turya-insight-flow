@@ -19,10 +19,9 @@ const SECONDARY_FOLLOWUP_MAX_MS = 20_000;
 // URL do servidor local para verificar status
 const STATUS_CHECK_URL = import.meta.env.VITE_WEBHOOK_SERVER_URL || "http://localhost:3001";
 
-/** Diagnóstico sem deploy: ative com ?turya_diag=1, localStorage turya_diag=1, ou no console: window.__TURYA_DIAG__ = true */
+/** Só logs extras no console; não altera download do HTML nem da planilha. ?turya_diag=1 | localStorage turya_diag=1 | window.__TURYA_DIAG__ */
 function isTuryaDiagEnabled(): boolean {
   try {
-    if (import.meta.env.DEV) return true;
     if (typeof window === "undefined") return false;
     if (localStorage.getItem("turya_diag") === "1") return true;
     if (sessionStorage.getItem("turya_diag") === "1") return true;

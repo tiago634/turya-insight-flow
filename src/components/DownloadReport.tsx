@@ -85,7 +85,6 @@ const DownloadReport = ({
   const handleSecondaryDownload = (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (!secondaryDownloadUrl || secondaryDownloadUrl === "#") {
       e.preventDefault();
-      alert("Arquivo XLSX ainda não foi disponibilizado pelo backend.");
       return;
     }
     if (secondaryDownloadUrl.startsWith("blob:")) {
