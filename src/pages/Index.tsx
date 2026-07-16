@@ -67,6 +67,8 @@ function logTuryaPollingDiagnostics(
 const Index = () => {
   const [appState, setAppState] = useState<AppState>("upload");
   const [htmlBlob, setHtmlBlob] = useState<Blob | null>(null);
+  const [docxBlob, setDocxBlob] = useState<Blob | null>(null);
+  const [docxFileName, setDocxFileName] = useState<string>("Proposta_Comercial.docx");
   const [secondaryFileBlob, setSecondaryFileBlob] = useState<Blob | null>(null);
   const [secondaryFileName, setSecondaryFileName] = useState<string>("Analise_Turya_XLSX");
   const [errorMessage, setErrorMessage] = useState<string>("");
@@ -135,17 +137,21 @@ const Index = () => {
       }
 
       const htmlContent = typeof data.html_content === "string" ? data.html_content : "";
+      const docxContent = typeof data.docx_content === "string" ? data.docx_content : "";
       const status = typeof data.status === "string" ? data.status : undefined;
       const hasHtml = htmlContent.length > 0;
-      const isCompleted = status === "completed" || (hasHtml && status !== "error");
-      if (isCompleted && hasHtml) {
+      const hasDocx = docxContent.length > 0;
+      const hasPrimary = hasHtml || hasDocx;
+      const isCompleted = status === "completed" || (hasPrimary && status !== "error");
+      if (isCompleted && hasPrimary) {
         try {
-          const binaryString = atob(htmlContent);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-          const blob = new Blob([bytes], { type: "text/html" });
+          const htmlBlobDecoded = hasHtml ? base64ToBlob(htmlContent, "text/html") : null;
+          const docxBlobDecoded = hasDocx
+            ? base64ToBlob(
+                docxContent,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              )
+            : null;
           if (pollingIntervalRef.current) {
             clearInterval(pollingIntervalRef.current);
             pollingIntervalRef.current = null;
@@ -156,7 +162,9 @@ const Index = () => {
             logTuryaPollingDiagnostics("conclusao", STATUS_CHECK_URL, sessionId, data, secondary);
           } else if (import.meta.env.DEV) {
             console.log(
-              "[Turya] Polling concluído. Arquivo secundário:",
+              "[Turya] Polling concluído. Documento principal:",
+              hasDocx ? "Word (.docx)" : "HTML",
+              "| Arquivo secundário:",
               secondary ? `${secondary.fileName} (${secondary.blob.size} bytes)` : "não encontrado no JSON",
               "| chaves no topo:",
               Object.keys(data)
@@ -165,11 +173,17 @@ const Index = () => {
           setSecondaryFileBlob(secondary?.blob ?? null);
           setSecondaryFileName(secondary?.fileName ?? "Analise_Turya_XLSX");
 
-          setHtmlBlob(blob);
+          setHtmlBlob(htmlBlobDecoded);
+          setDocxBlob(docxBlobDecoded);
+          setDocxFileName(
+            typeof data.docx_filename === "string" && data.docx_filename.trim()
+              ? data.docx_filename.trim()
+              : "Proposta_Comercial.docx"
+          );
           setAppState("completed");
           window.scrollTo({ top: 0, behavior: "smooth" });
         } catch (blobErr) {
-          console.error("Polling: erro ao converter html_content para blob", blobErr);
+          console.error("Polling: erro ao converter documento para blob", blobErr);
         }
         return;
       }
@@ -189,7 +203,7 @@ const Index = () => {
         return;
       }
 
-      if (status === "processing" && !hasHtml) {
+      if (status === "processing" && !hasPrimary) {
         console.log("Polling:", status, "| backend:", STATUS_CHECK_URL);
       }
     } catch (error) {
@@ -310,6 +324,8 @@ const Index = () => {
     
     setSecondaryFileBlob(null);
     setSecondaryFileName("Analise_Turya_XLSX");
+    setDocxBlob(null);
+    setDocxFileName("Proposta_Comercial.docx");
     setHtmlBlob(blob);
     setAppState("completed");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -340,6 +356,8 @@ const Index = () => {
 
     setAppState("upload");
     setHtmlBlob(null);
+    setDocxBlob(null);
+    setDocxFileName("Proposta_Comercial.docx");
     setSecondaryFileBlob(null);
     setSecondaryFileName("Analise_Turya_XLSX");
     setErrorMessage("");
@@ -360,6 +378,8 @@ const Index = () => {
     return (
       <DownloadReport
         htmlBlob={htmlBlob}
+        docxBlob={docxBlob}
+        docxFileName={docxFileName}
         secondaryFileBlob={secondaryFileBlob}
         secondaryFileName={secondaryFileName}
         onReset={handleReset}
@@ -399,6 +419,16 @@ const Index = () => {
 };
 
 export default Index;
+
+function base64ToBlob(base64: string, mime: string): Blob {
+  const normalized = normalizeBase64Payload(base64);
+  const binaryString = atob(normalized);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mime });
+}
 
 function extractSecondarySpreadsheet(data: Record<string, unknown>): { blob: Blob; fileName: string } | null {
   const defaultFileName = "Analise_Turya_XLSX";

@@ -64,7 +64,14 @@ function detectPayloadKindFromBase64(base64Str) {
     const normalized = base64Str.replace(/^data:.*,/, '').trim();
     const buf = Buffer.from(normalized, 'base64');
     if (buf.length < 4) return 'unknown';
-    if (buf[0] === 0x50 && buf[1] === 0x4b) return 'xlsx';
+    if (buf[0] === 0x50 && buf[1] === 0x4b) {
+      // ZIP (OOXML). Os nomes das entradas ficam em texto claro no pacote,
+      // então dá para distinguir Word (.docx) de planilha (.xlsx).
+      const zipHead = buf.toString('latin1');
+      if (zipHead.includes('word/document.xml') || zipHead.includes('wordprocessingml')) return 'docx';
+      if (zipHead.includes('xl/workbook.xml') || zipHead.includes('spreadsheetml')) return 'xlsx';
+      return 'xlsx';
+    }
     if (buf.length >= 8 && buf[0] === 0xd0 && buf[1] === 0xcf && buf[2] === 0x11 && buf[3] === 0xe0) return 'xls';
     const head = buf.slice(0, Math.min(512, buf.length)).toString('utf8').trimStart();
     if (head.startsWith('<!') || head.startsWith('<html') || head.startsWith('<HTML')) return 'html';
@@ -83,13 +90,21 @@ function detectPayloadKindFromBase64(base64Str) {
 function collectWebhookPayloads(req) {
   const htmlCandidates = [];
   const sheetCandidates = [];
+  const docxCandidates = [];
   const opaqueParts = [];
+  let docxName = null;
 
   const addSheet = (b64) => {
     if (b64 && typeof b64 === 'string' && b64.trim()) sheetCandidates.push(b64.trim());
   };
   const addHtml = (b64) => {
     if (b64 && typeof b64 === 'string' && b64.trim()) htmlCandidates.push(b64.trim());
+  };
+  const addDocx = (b64, name) => {
+    if (b64 && typeof b64 === 'string' && b64.trim()) {
+      docxCandidates.push(b64.trim());
+      if (name) docxName = name;
+    }
   };
 
   if (req.body.html_content) {
@@ -115,6 +130,12 @@ function collectWebhookPayloads(req) {
     const field = (f.fieldname || '').toLowerCase();
     const kind = detectPayloadKindFromBase64(b64);
 
+    const mime = (f.mimetype || '').toLowerCase();
+    const forceDocx =
+      name.endsWith('.docx') ||
+      mime.includes('wordprocessingml') ||
+      field.includes('docx') ||
+      field.includes('word');
     const forceSheet =
       name.endsWith('.xlsx') ||
       name.endsWith('.xls') ||
@@ -125,6 +146,10 @@ function collectWebhookPayloads(req) {
       field.includes('spreadsheet');
     const forceHtml = name.endsWith('.html') || field === 'html_file' || field === 'html';
 
+    if (forceDocx || kind === 'docx') {
+      addDocx(b64, f.originalname || name);
+      continue;
+    }
     if (forceSheet) {
       addSheet(b64);
       continue;
@@ -170,8 +195,15 @@ function collectWebhookPayloads(req) {
 
   const htmlContent = htmlCandidates.reduce((best, cur) => (!best || cur.length > best.length ? cur : best), null);
   const spreadsheetFromFiles = sheetCandidates.length ? sheetCandidates[sheetCandidates.length - 1] : null;
+  const docxContent = docxCandidates.reduce((best, cur) => (!best || cur.length > best.length ? cur : best), null);
 
-  return { htmlContent, spreadsheetFromFiles, _debug: { nHtmlCand: htmlCandidates.length, nSheetCand: sheetCandidates.length } };
+  return {
+    htmlContent,
+    spreadsheetFromFiles,
+    docxContent,
+    docxFileName: docxName,
+    _debug: { nHtmlCand: htmlCandidates.length, nSheetCand: sheetCandidates.length, nDocxCand: docxCandidates.length }
+  };
 }
 
 // Limite de body grande para receber HTML em base64 ou arquivo no /webhook/result
@@ -186,7 +218,7 @@ app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
 const upload = multer({ limits: { fileSize: 50 * 1024 * 1024 } }); // 50 MB
 
 // URL do webhook de entrada do n8n
-const N8N_WEBHOOK_INPUT_URL = process.env.N8N_WEBHOOK_INPUT_URL || 'https://wgatech.app.n8n.cloud/webhook/219cc658-bea9-4cb9-b463-9ead6f8cdc21';
+const N8N_WEBHOOK_INPUT_URL = process.env.N8N_WEBHOOK_INPUT_URL || 'https://wgatech.app.n8n.cloud/webhook/43626a1d-33b4-4d2b-b16a-945507737e75';
 
 // Endpoint PROXY para enviar documentos ao n8n (resolve problema de CORS)
 // Enviamos multipart/form-data: arquivos como binário (sem base64), campos como form fields.
@@ -335,13 +367,15 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
       error = req.body.error;
     }
 
-    const { htmlContent, spreadsheetFromFiles, _debug } = collectWebhookPayloads(req);
+    let { htmlContent, spreadsheetFromFiles, docxContent, docxFileName, _debug } = collectWebhookPayloads(req);
     console.log(
       '📊 Coleta (um POST pode ter 2 arquivos):',
       _debug.nHtmlCand,
       'candidato(s) HTML,',
       _debug.nSheetCand,
-      'candidato(s) planilha | files:',
+      'candidato(s) planilha,',
+      _debug.nDocxCand,
+      'candidato(s) Word | files:',
       req.files?.length ?? 0
     );
 
@@ -367,11 +401,14 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
     console.log(`🔑 session_id recebido do n8n: ${sessionId}`);
     console.log(`🔑 O frontend DEVE estar fazendo polling com este mesmo ID. Se a tela mostrar outro ID, corrija no n8n a expressão do campo session_id no nó HTTP Request (use o primeiro Webhook: $('NomeDoWebhook').first().json.body.session_id).`);
 
-    // Campo "html_content" pode trazer na verdade XLS/XLSX (segundo POST do n8n)
+    // Campo "html_content" pode trazer na verdade XLS/XLSX/DOCX (POST separado do n8n)
     if (htmlContent) {
       const k = detectPayloadKindFromBase64(htmlContent);
       if (k === 'xlsx' || k === 'xls') {
         spreadsheetFromFiles = htmlContent;
+        htmlContent = null;
+      } else if (k === 'docx') {
+        docxContent = docxContent || htmlContent;
         htmlContent = null;
       }
     }
@@ -385,7 +422,9 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
       received_at: new Date().toISOString(),
       html_content: existing.html_content || null,
       xlsx_content: existing.xlsx_content || null,
-      Analise_Turya_XLSX: existing.Analise_Turya_XLSX || null
+      Analise_Turya_XLSX: existing.Analise_Turya_XLSX || null,
+      docx_content: existing.docx_content || null,
+      docx_filename: existing.docx_filename || null
     };
 
     if (htmlContent && typeof htmlContent === 'string' && htmlContent.length > 0) {
@@ -405,24 +444,34 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
       merged.Analise_Turya_XLSX = spreadsheetFromFiles;
     }
 
+    if (docxContent && typeof docxContent === 'string' && docxContent.length > 0) {
+      if (!merged.docx_content || docxContent.length > merged.docx_content.length) {
+        merged.docx_content = docxContent;
+        merged.docx_filename = docxFileName || merged.docx_filename || 'Proposta_Comercial.docx';
+      }
+    }
+
     const hasHtmlAfter = !!(merged.html_content && merged.html_content.length > 0);
     const hasSheetAfter = !!(merged.xlsx_content && merged.xlsx_content.length > 0);
+    const hasDocxAfter = !!(merged.docx_content && merged.docx_content.length > 0);
 
-    if (!hasHtmlAfter && !hasSheetAfter) {
+    if (!hasHtmlAfter && !hasSheetAfter && !hasDocxAfter) {
       console.error('❌ Nenhum arquivo útil após merge. Content-Type:', req.headers['content-type']);
       console.error('❌ req.files:', req.files?.length ?? 0, req.files ? req.files.map(f => ({ field: f.fieldname, size: f.size })) : []);
       console.error('❌ req.body keys:', Object.keys(req.body || {}));
       return res.status(400).json({
         success: false,
-        error: 'Nenhum HTML nem planilha recebidos',
+        error: 'Nenhum HTML, Word nem planilha recebidos',
         hint: 'Envie session_id e o arquivo (multipart ou html_content em base64).'
       });
     }
 
-    // Só planilha ainda (n8n envia antes do HTML): grava no Redis e mantém processing para o polling continuar.
-    if (!hasHtmlAfter && hasSheetAfter) {
+    // Documento principal = HTML ou Word (.docx). Enquanto só chegou a planilha, mantém
+    // processing para o polling continuar até o documento principal chegar.
+    const hasPrimary = hasHtmlAfter || hasDocxAfter;
+    if (!hasPrimary && hasSheetAfter) {
       merged.status = 'processing';
-    } else if (hasHtmlAfter) {
+    } else if (hasPrimary) {
       merged.status = status && String(status).length ? status : 'completed';
     }
 
@@ -430,9 +479,10 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
 
     const htmlLen = merged.html_content ? merged.html_content.length : 0;
     const sheetLen = merged.xlsx_content ? merged.xlsx_content.length : 0;
+    const docxLen = merged.docx_content ? merged.docx_content.length : 0;
     console.log(`✅ Resultado salvo (merge) para session_id: ${sessionId}`);
     console.log(`   Status: ${merged.status}`);
-    console.log(`   HTML base64 length: ${htmlLen} | Planilha base64 length: ${sheetLen || '(nenhuma ainda)'}`);
+    console.log(`   HTML base64: ${htmlLen} | Word base64: ${docxLen || '(nenhum ainda)'} | Planilha base64: ${sheetLen || '(nenhuma ainda)'}`);
     if (redisClient) console.log(`   Store: Redis (key ${PREFIX}${sessionId})`);
 
     res.json({
@@ -440,6 +490,7 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
       session_id: sessionId,
       message: 'Resultado recebido com sucesso',
       html_received_bytes: htmlLen,
+      docx_received_bytes: docxLen,
       spreadsheet_received_bytes: sheetLen
     });
 
@@ -493,21 +544,26 @@ app.get('/api/analysis/:sessionId', async (req, res) => {
   }
 
   const hasHtml = !!(result.html_content && result.html_content.length > 0);
+  const hasDocx = !!(result.docx_content && result.docx_content.length > 0);
   const sheetB64 = result.xlsx_content || result.Analise_Turya_XLSX || null;
   const hasSheet = !!(sheetB64 && sheetB64.length > 0);
   console.log(
-    `✅ Polling: session_id ${sessionId}, hasHtml: ${hasHtml}, html length: ${result.html_content?.length ?? 0}` +
+    `✅ Polling: session_id ${sessionId}, hasHtml: ${hasHtml}, hasDocx: ${hasDocx}, html length: ${result.html_content?.length ?? 0}` +
+      (hasDocx ? `, word length: ${result.docx_content.length}` : '') +
       (hasSheet ? `, planilha length: ${sheetB64.length}` : ', sem planilha no store')
   );
 
-  // Sem HTML ainda: nunca devolver "completed" (senão o front fecha antes da planilha/HTML final).
-  const effectiveStatus = hasHtml ? 'completed' : 'processing';
+  // Documento principal = HTML ou Word. Só devolve "completed" quando ele chegou (evita
+  // fechar antes da planilha/documento final).
+  const effectiveStatus = (hasHtml || hasDocx) ? 'completed' : 'processing';
 
-  // Resposta: html_content + campos que o frontend usa para extrair XLS/XLSX
+  // Resposta: documento principal (html/word) + campos que o frontend usa para extrair XLS/XLSX
   const payload = {
     session_id: result.session_id || sessionId,
     status: effectiveStatus,
     html_content: result.html_content || null,
+    docx_content: result.docx_content || null,
+    docx_filename: result.docx_filename || null,
     xlsx_content: result.xlsx_content || null,
     Analise_Turya_XLSX: result.Analise_Turya_XLSX || result.xlsx_content || null,
     error: result.error || null,

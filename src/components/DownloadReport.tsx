@@ -10,6 +10,9 @@ interface DownloadReportProps {
   onReset: () => void;
   /** Quando o relatório vem do polling (backend), o Index passa o Blob. Senão usa localStorage/query. */
   htmlBlob?: Blob | null;
+  /** Documento principal em Word (.docx), quando o fluxo entrega proposta em Word. */
+  docxBlob?: Blob | null;
+  docxFileName?: string;
   /** Arquivo complementar opcional (ex: Analise_Turya_XLSX) */
   secondaryFileBlob?: Blob | null;
   secondaryFileName?: string;
@@ -18,15 +21,22 @@ interface DownloadReportProps {
 const DownloadReport = ({
   onReset,
   htmlBlob,
+  docxBlob,
+  docxFileName = "Proposta_Comercial.docx",
   secondaryFileBlob,
   secondaryFileName = "Analise_Turya_XLSX",
 }: DownloadReportProps) => {
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [secondaryDownloadUrl, setSecondaryDownloadUrl] = useState<string | null>(null);
 
+  // Documento principal = Word (.docx) quando disponível; senão, HTML (fluxo antigo).
+  const primaryIsDocx = !!(docxBlob && docxBlob.size > 0);
+  const primaryDownloadName = primaryIsDocx ? docxFileName : "Analise_DO.html";
+
   useEffect(() => {
-    if (htmlBlob && htmlBlob.size > 0) {
-      const url = URL.createObjectURL(htmlBlob);
+    const primaryBlob = primaryIsDocx ? docxBlob : htmlBlob;
+    if (primaryBlob && primaryBlob.size > 0) {
+      const url = URL.createObjectURL(primaryBlob);
       setDownloadUrl(url);
       return () => {
         URL.revokeObjectURL(url);
@@ -48,7 +58,7 @@ const DownloadReport = ({
     if (result.downloadUrl && result.downloadUrl !== "#") {
       setDownloadUrl(result.downloadUrl);
     }
-  }, [htmlBlob]);
+  }, [htmlBlob, docxBlob, primaryIsDocx]);
 
   useEffect(() => {
     if (secondaryFileBlob && secondaryFileBlob.size > 0) {
@@ -75,7 +85,7 @@ const DownloadReport = ({
       e.preventDefault();
       const a = document.createElement("a");
       a.href = downloadUrl;
-      a.download = "Analise_DO.html";
+      a.download = primaryDownloadName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -132,7 +142,9 @@ const DownloadReport = ({
           <div className={styles.divider} />
 
           <p className={styles.body}>
-            O relatório comparativo das suas cotações D&amp;O está gerado.
+            {primaryIsDocx
+              ? "A proposta comercial das suas cotações D\u0026O está gerada em Word."
+              : "O relatório comparativo das suas cotações D\u0026O está gerado."}
             <br />
             <em>Abra o arquivo e tome sua decisão com clareza.</em>
           </p>
@@ -144,10 +156,10 @@ const DownloadReport = ({
               href={href}
               target={isValidUrl && !isBlobUrl ? "_blank" : undefined}
               rel={isValidUrl && !isBlobUrl ? "noreferrer" : undefined}
-              download={isValidUrl ? "Analise_DO.html" : undefined}
+              download={isValidUrl ? primaryDownloadName : undefined}
               onClick={handleDownload}
             >
-              Baixar relatório
+              {primaryIsDocx ? "Baixar proposta (Word)" : "Baixar relatório"}
               <svg className={styles.btnDlIcon} viewBox="0 0 24 24">
                 <path d="M12 15V3M12 15l-4-4M12 15l4-4M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17" />
               </svg>
@@ -234,7 +246,7 @@ const DownloadReport = ({
               </div>
 
               <div className={styles.docSign}>
-                <div className={styles.signLeft}>Analise_DO.html</div>
+                <div className={styles.signLeft}>{primaryDownloadName}</div>
                 <div className={styles.signStamp}>Verificado · Turya</div>
               </div>
 
