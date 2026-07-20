@@ -29,12 +29,27 @@ const DownloadReport = ({
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [secondaryDownloadUrl, setSecondaryDownloadUrl] = useState<string | null>(null);
 
-  // Documento principal = Word (.docx) quando disponível; senão, HTML (fluxo antigo).
+  // Documento principal = Word (.docx) quando disponível; senão HTML; senão a planilha.
   const primaryIsDocx = !!(docxBlob && docxBlob.size > 0);
-  const primaryDownloadName = primaryIsDocx ? docxFileName : "Analise_DO.html";
+  const primaryIsHtml = !primaryIsDocx && !!(htmlBlob && htmlBlob.size > 0);
+  const primaryIsSheet =
+    !primaryIsDocx &&
+    !primaryIsHtml &&
+    !!(secondaryFileBlob && secondaryFileBlob.size > 0);
+  const primaryDownloadName = primaryIsDocx
+    ? docxFileName
+    : primaryIsSheet
+      ? secondaryFileName
+      : "Analise_DO.html";
 
   useEffect(() => {
-    const primaryBlob = primaryIsDocx ? docxBlob : htmlBlob;
+    const primaryBlob = primaryIsDocx
+      ? docxBlob
+      : primaryIsHtml
+        ? htmlBlob
+        : primaryIsSheet
+          ? secondaryFileBlob
+          : null;
     if (primaryBlob && primaryBlob.size > 0) {
       const url = URL.createObjectURL(primaryBlob);
       setDownloadUrl(url);
@@ -58,9 +73,14 @@ const DownloadReport = ({
     if (result.downloadUrl && result.downloadUrl !== "#") {
       setDownloadUrl(result.downloadUrl);
     }
-  }, [htmlBlob, docxBlob, primaryIsDocx]);
+  }, [htmlBlob, docxBlob, secondaryFileBlob, primaryIsDocx, primaryIsHtml, primaryIsSheet]);
 
   useEffect(() => {
+    // Se a planilha já é o download principal, não duplicar no botão secundário.
+    if (primaryIsSheet) {
+      setSecondaryDownloadUrl(null);
+      return;
+    }
     if (secondaryFileBlob && secondaryFileBlob.size > 0) {
       const url = URL.createObjectURL(secondaryFileBlob);
       setSecondaryDownloadUrl(url);
@@ -69,7 +89,7 @@ const DownloadReport = ({
       };
     }
     setSecondaryDownloadUrl(null);
-  }, [secondaryFileBlob]);
+  }, [secondaryFileBlob, primaryIsSheet]);
 
   const handleNewQuotes = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
@@ -144,7 +164,9 @@ const DownloadReport = ({
           <p className={styles.body}>
             {primaryIsDocx
               ? "A proposta comercial das suas cotações D\u0026O está gerada em Word."
-              : "O relatório comparativo das suas cotações D\u0026O está gerado."}
+              : primaryIsSheet
+                ? "A análise em planilha das suas cotações D\u0026O está pronta."
+                : "O relatório comparativo das suas cotações D\u0026O está gerado."}
             <br />
             <em>Abra o arquivo e tome sua decisão com clareza.</em>
           </p>
@@ -159,32 +181,38 @@ const DownloadReport = ({
               download={isValidUrl ? primaryDownloadName : undefined}
               onClick={handleDownload}
             >
-              {primaryIsDocx ? "Baixar proposta (Word)" : "Baixar relatório"}
+              {primaryIsDocx
+                ? "Baixar proposta (Word)"
+                : primaryIsSheet
+                  ? "Baixar Análise XLSX"
+                  : "Baixar relatório"}
               <svg className={styles.btnDlIcon} viewBox="0 0 24 24">
                 <path d="M12 15V3M12 15l-4-4M12 15l4-4M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17" />
               </svg>
             </a>
 
-            <>
-              <a
-                id="btnDownloadSecondary"
-                className={`${styles.btnNew} ${!hasSecondaryFile ? styles.btnDisabled : ""}`}
-                href={secondaryHref}
-                download={secondaryFileName}
-                onClick={handleSecondaryDownload}
-                aria-disabled={!hasSecondaryFile}
-              >
-                <svg className={styles.btnNewIcon} viewBox="0 0 24 24">
-                  <path d="M12 15V3M12 15l-4-4M12 15l4-4M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17" />
-                </svg>
-                Baixar Análise XLSX
-              </a>
-              <p className={styles.xlsxHint}>
-                Este arquivo XLSX é editável e contém a base da análise. Para
-                visualizar insights valiosos da cotação e tecnologias acopladas
-                como deep research, baixe a análise principal.
-              </p>
-            </>
+            {!primaryIsSheet && (
+              <>
+                <a
+                  id="btnDownloadSecondary"
+                  className={`${styles.btnNew} ${!hasSecondaryFile ? styles.btnDisabled : ""}`}
+                  href={secondaryHref}
+                  download={secondaryFileName}
+                  onClick={handleSecondaryDownload}
+                  aria-disabled={!hasSecondaryFile}
+                >
+                  <svg className={styles.btnNewIcon} viewBox="0 0 24 24">
+                    <path d="M12 15V3M12 15l-4-4M12 15l4-4M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17" />
+                  </svg>
+                  Baixar Análise XLSX
+                </a>
+                <p className={styles.xlsxHint}>
+                  Este arquivo XLSX é editável e contém a base da análise. Para
+                  visualizar insights valiosos da cotação e tecnologias acopladas
+                  como deep research, baixe a análise principal.
+                </p>
+              </>
+            )}
 
             <a href="#" className={styles.btnNew} onClick={handleNewQuotes}>
               <svg className={styles.btnNewIcon} viewBox="0 0 24 24">

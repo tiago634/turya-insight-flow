@@ -141,9 +141,13 @@ const Index = () => {
       const status = typeof data.status === "string" ? data.status : undefined;
       const hasHtml = htmlContent.length > 0;
       const hasDocx = docxContent.length > 0;
+      const secondaryPreview = extractSecondarySpreadsheet(data);
+      const hasSheet = !!(secondaryPreview?.blob && secondaryPreview.blob.size > 0);
       const hasPrimary = hasHtml || hasDocx;
-      const isCompleted = status === "completed" || (hasPrimary && status !== "error");
-      if (isCompleted && hasPrimary) {
+      // Conclui com HTML/Word OU só planilha (fluxo D&O às vezes só devolve o XLS).
+      const isCompleted =
+        status === "completed" || ((hasPrimary || hasSheet) && status !== "error");
+      if (isCompleted && (hasPrimary || hasSheet)) {
         try {
           const htmlBlobDecoded = hasHtml ? base64ToBlob(htmlContent, "text/html") : null;
           const docxBlobDecoded = hasDocx
@@ -157,13 +161,13 @@ const Index = () => {
             pollingIntervalRef.current = null;
           }
 
-          const secondary = extractSecondarySpreadsheet(data);
+          const secondary = secondaryPreview;
           if (isTuryaDiagEnabled()) {
             logTuryaPollingDiagnostics("conclusao", STATUS_CHECK_URL, sessionId, data, secondary);
           } else if (import.meta.env.DEV) {
             console.log(
               "[Turya] Polling concluído. Documento principal:",
-              hasDocx ? "Word (.docx)" : "HTML",
+              hasDocx ? "Word (.docx)" : hasHtml ? "HTML" : "apenas planilha",
               "| Arquivo secundário:",
               secondary ? `${secondary.fileName} (${secondary.blob.size} bytes)` : "não encontrado no JSON",
               "| chaves no topo:",
@@ -203,7 +207,7 @@ const Index = () => {
         return;
       }
 
-      if (status === "processing" && !hasPrimary) {
+      if (status === "processing" && !hasPrimary && !hasSheet) {
         console.log("Polling:", status, "| backend:", STATUS_CHECK_URL);
       }
     } catch (error) {

@@ -65,15 +65,25 @@ function detectPayloadKindFromBase64(base64Str) {
     const buf = Buffer.from(normalized, 'base64');
     if (buf.length < 4) return 'unknown';
     if (buf[0] === 0x50 && buf[1] === 0x4b) {
-      // ZIP (OOXML). Os nomes das entradas ficam em texto claro no pacote,
-      // então dá para distinguir Word (.docx) de planilha (.xlsx).
-      const zipHead = buf.toString('latin1');
+      // ZIP (OOXML). Nomes das entradas ficam em texto claro; basta olhar o início.
+      const zipHead = buf.slice(0, Math.min(65536, buf.length)).toString('latin1');
       if (zipHead.includes('word/document.xml') || zipHead.includes('wordprocessingml')) return 'docx';
       if (zipHead.includes('xl/workbook.xml') || zipHead.includes('spreadsheetml')) return 'xlsx';
+      // Sem marcadores claros: default planilha (fluxo antigo); o nome/mime pode forçar docx.
       return 'xlsx';
     }
     if (buf.length >= 8 && buf[0] === 0xd0 && buf[1] === 0xcf && buf[2] === 0x11 && buf[3] === 0xe0) return 'xls';
-    const head = buf.slice(0, Math.min(512, buf.length)).toString('utf8').trimStart();
+    const head = buf.slice(0, Math.min(4096, buf.length)).toString('utf8').trimStart();
+    // SpreadsheetML / Excel XML (nó XLSX do fluxo D&O) — NÃO é HTML de tela.
+    if (
+      head.startsWith('<?xml') ||
+      /^<Workbook[\s>]/i.test(head) ||
+      head.includes('<ss:Workbook') ||
+      head.includes('urn:schemas-microsoft-com:office:spreadsheet') ||
+      head.includes('mso-application progid="Excel.Sheet"')
+    ) {
+      return 'xls';
+    }
     if (head.startsWith('<!') || head.startsWith('<html') || head.startsWith('<HTML')) return 'html';
     if (head.startsWith('<')) return 'html';
     return 'unknown';
@@ -110,19 +120,26 @@ function collectWebhookPayloads(req) {
   if (req.body.html_content) {
     const k = detectPayloadKindFromBase64(req.body.html_content);
     if (k === 'xlsx' || k === 'xls') addSheet(req.body.html_content);
+    else if (k === 'docx') addDocx(req.body.html_content, 'Proposta_Comercial.docx');
     else addHtml(req.body.html_content);
   } else if (req.body.htmlContent) {
     const k = detectPayloadKindFromBase64(req.body.htmlContent);
     if (k === 'xlsx' || k === 'xls') addSheet(req.body.htmlContent);
+    else if (k === 'docx') addDocx(req.body.htmlContent, 'Proposta_Comercial.docx');
     else addHtml(req.body.htmlContent);
   }
   if (req.body.html && typeof req.body.html === 'string' && req.body.html.length > 0) {
-    addHtml(Buffer.from(req.body.html, 'utf8').toString('base64'));
+    const rawB64 = Buffer.from(req.body.html, 'utf8').toString('base64');
+    const k = detectPayloadKindFromBase64(rawB64);
+    if (k === 'xlsx' || k === 'xls') addSheet(rawB64);
+    else if (k === 'docx') addDocx(rawB64, 'Proposta_Comercial.docx');
+    else addHtml(rawB64);
   }
 
   addSheet(req.body.xlsx_content);
   addSheet(req.body.xls_content);
   addSheet(req.body.Analise_Turya_XLSX);
+  if (req.body.docx_content) addDocx(req.body.docx_content, req.body.docx_filename || 'Proposta_Comercial.docx');
 
   for (const f of req.files || []) {
     const b64 = f.buffer.toString('base64');
@@ -180,16 +197,14 @@ function collectWebhookPayloads(req) {
     }
   }
 
-  if (opaqueParts.length >= 2) {
-    opaqueParts.sort((a, b) => b.length - a.length);
-    addHtml(opaqueParts[0]);
-    addSheet(opaqueParts[1]);
-  } else if (opaqueParts.length === 1) {
-    const one = opaqueParts[0];
+  // Classificar cada parte opaca pela assinatura — NÃO assumir "maior = HTML"
+  // (no fluxo D&O atual o maior costuma ser o Word .docx).
+  for (const one of opaqueParts) {
     const k = detectPayloadKindFromBase64(one);
-    if (k === 'xlsx' || k === 'xls') addSheet(one);
+    if (k === 'docx') addDocx(one, 'Proposta_Comercial.docx');
+    else if (k === 'xlsx' || k === 'xls') addSheet(one);
     else if (k === 'html') addHtml(one);
-    else if (one.length > 800000) addHtml(one);
+    else if (one.length > 800000) addDocx(one, 'Proposta_Comercial.docx');
     else addSheet(one);
   }
 
@@ -436,6 +451,11 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
       } else if (k === 'xlsx' || k === 'xls') {
         merged.xlsx_content = htmlContent;
         merged.Analise_Turya_XLSX = htmlContent;
+      } else if (k === 'docx') {
+        if (!merged.docx_content || htmlContent.length > merged.docx_content.length) {
+          merged.docx_content = htmlContent;
+          merged.docx_filename = merged.docx_filename || 'Proposta_Comercial.docx';
+        }
       }
     }
 
@@ -466,13 +486,14 @@ app.post('/webhook/result', upload.any(), async (req, res) => {
       });
     }
 
-    // Documento principal = HTML ou Word (.docx). Enquanto só chegou a planilha, mantém
-    // processing para o polling continuar até o documento principal chegar.
-    const hasPrimary = hasHtmlAfter || hasDocxAfter;
-    if (!hasPrimary && hasSheetAfter) {
-      merged.status = 'processing';
-    } else if (hasPrimary) {
+    // Documento entregável = HTML, Word OU planilha. O fluxo D&O CAG Longo
+    // às vezes manda só a planilha (os dois binários no n8n usam o campo "data"
+    // e um sobrescreve o outro). Não podemos ficar em processing para sempre.
+    const hasDeliverable = hasHtmlAfter || hasDocxAfter || hasSheetAfter;
+    if (hasDeliverable) {
       merged.status = status && String(status).length ? status : 'completed';
+    } else {
+      merged.status = 'processing';
     }
 
     await storeSet(sessionId, merged);
@@ -553,9 +574,9 @@ app.get('/api/analysis/:sessionId', async (req, res) => {
       (hasSheet ? `, planilha length: ${sheetB64.length}` : ', sem planilha no store')
   );
 
-  // Documento principal = HTML ou Word. Só devolve "completed" quando ele chegou (evita
-  // fechar antes da planilha/documento final).
-  const effectiveStatus = (hasHtml || hasDocx) ? 'completed' : 'processing';
+  // Qualquer arquivo útil (HTML, Word ou planilha) = completed. Sem isso a tela
+  // fica em "Analisando..." para sempre quando o n8n só devolve a planilha.
+  const effectiveStatus = (hasHtml || hasDocx || hasSheet) ? 'completed' : 'processing';
 
   // Resposta: documento principal (html/word) + campos que o frontend usa para extrair XLS/XLSX
   const payload = {
