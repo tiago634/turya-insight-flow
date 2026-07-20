@@ -8,6 +8,8 @@ const FormData = require('form-data');
 // Node.js 18+ tem fetch nativo, não precisa de node-fetch
 const app = express();
 const PORT = process.env.PORT || 3001;
+/** Aparece em GET /health — use para confirmar se o Railway pegou o código novo. */
+const APP_VERSION = '2ff3382-sheet-complete';
 
 // Railway pode expor REDIS_URL ou REDIS_PUBLIC_URL; aceitamos os dois
 const REDIS_URL = process.env.REDIS_URL || process.env.REDIS_PUBLIC_URL;
@@ -607,6 +609,7 @@ app.get('/health', async (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     stored_results: total,
+    app_version: APP_VERSION,
     /** No Railway: compare com `git rev-parse HEAD` local após push (confirma deploy). */
     git_commit: process.env.RAILWAY_GIT_COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT || null,
     railway_deployment_id: process.env.RAILWAY_DEPLOYMENT_ID || null
