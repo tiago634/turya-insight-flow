@@ -1,5 +1,7 @@
-import { useLocation } from "react-router-dom";
 import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
+import Header from "@/components/Header";
+import { CtaButton } from "@/components/CtaButton";
 
 const NotFound = () => {
   const location = useLocation();
@@ -9,14 +11,20 @@ const NotFound = () => {
   }, [location.pathname]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">404</h1>
-        <p className="mb-4 text-xl text-muted-foreground">Oops! Page not found</p>
-        <a href="/" className="text-primary underline hover:text-primary/90">
-          Return to Home
-        </a>
-      </div>
+    <div className="relative min-h-screen bg-[#070410] text-white">
+      <Header variant="brand" />
+      <main className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
+        <div className="eyebrow-turya mb-6">página não encontrada</div>
+        <h1 className="text-[clamp(48px,10vw,96px)] font-extralight leading-none tracking-[-0.5px]">
+          <span className="text-grad">404</span>
+        </h1>
+        <p className="mt-6 max-w-md text-[17px] font-light text-white/88">
+          Este endereço não existe. Volte para a análise de cotações D&amp;O.
+        </p>
+        <div className="mt-10">
+          <CtaButton href="/">VOLTAR AO INÍCIO</CtaButton>
+        </div>
+      </main>
     </div>
   );
 };

@@ -14,7 +14,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Poppins', 'sans-serif'],
+        sans: ["DM Sans", "system-ui", "sans-serif"],
+        mono: ["DM Mono", "ui-monospace", "monospace"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -51,17 +52,16 @@ export default {
           foreground: "hsl(var(--card-foreground))",
         },
         turya: {
-          orange: "hsl(var(--turya-orange))",
-          "orange-light": "hsl(var(--turya-orange-light))",
-          red: "hsl(var(--turya-red))",
-          magenta: "hsl(var(--turya-magenta))",
-          yellow: "hsl(var(--turya-yellow))",
-          black: "hsl(var(--turya-black))",
-          dark: "hsl(var(--turya-dark))",
-          gray: "hsl(var(--turya-gray))",
-          "gray-light": "hsl(var(--turya-gray-light))",
-          white: "hsl(var(--turya-white))",
+          bg: "#070410",
+          orange: "#EA6424",
+          yellow: "#FFDE59",
+          cream: "#FFC6A4",
+          gold: "#FFCF8A",
+          cold: "#5D6D78",
         },
+      },
+      transitionDuration: {
+        400: "400ms",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -92,6 +92,14 @@ export default {
           "0%": { transform: "rotate(0deg)" },
           "100%": { transform: "rotate(360deg)" },
         },
+        "turya-hint": {
+          "0%, 100%": { opacity: "0.35" },
+          "50%": { opacity: "0.9" },
+        },
+        "turya-gap": {
+          "0%, 100%": { boxShadow: "0 0 8px rgba(234,100,36,.5)" },
+          "50%": { boxShadow: "0 0 16px rgba(234,100,36,.9)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -99,6 +107,8 @@ export default {
         "fade-in": "fade-in 0.5s ease-out forwards",
         "scale-in": "scale-in 0.3s ease-out forwards",
         "spin-slow": "spin-slow 3s linear infinite",
+        "turya-hint": "turya-hint 2.6s ease-in-out infinite",
+        "turya-gap": "turya-gap 2s ease-in-out infinite",
       },
     },
   },

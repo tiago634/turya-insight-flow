@@ -1,14 +1,6 @@
 import { useState, useCallback, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Upload,
-  FileText,
-  X,
-  AlertCircle,
-  Send,
-  Loader2,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { AnimatePresence, motion } from "framer-motion";
+import { AlertCircle, FileText, Loader2, Send, Upload, X } from "lucide-react";
 import { useAnalysisFlow } from "@/hooks/useAnalysisFlow";
 import { useTermsGate } from "@/hooks/useTermsGate";
 
@@ -135,159 +127,140 @@ const UploadZone = () => {
   };
 
   return (
-    <section id="upload" className="py-16">
-      <div className="container mx-auto px-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-3xl mx-auto"
-        >
-          <form onSubmit={handleSubmit}>
-            <div className="card-elevated p-8 md:p-10">
-              <h2 className="text-2xl font-bold text-center mb-2">
-                Envie suas cotações
-              </h2>
-              <p className="text-muted-foreground text-center mb-8">
-                Faça upload dos PDFs das cotações D&O para análise comparativa
-              </p>
+    <section
+      id="upload"
+      className="relative isolate flex flex-col items-center px-6 py-[84px] text-center md:py-[130px]"
+    >
+      <div className="mx-auto w-full max-w-[1040px]">
+        <form onSubmit={handleSubmit} className="mx-auto w-full max-w-[760px]">
+          <div className="w-full rounded-[22px] border border-[rgba(255,180,110,.16)] bg-[rgba(18,12,28,.5)] px-[22px] py-[30px] shadow-[0_30px_80px_rgba(0,0,0,.5),0_0_50px_rgba(234,100,36,.08)] md:px-9 md:py-10">
+            <div className="eyebrow-turya mb-4">comece agora</div>
+            <h2 className="text-[clamp(24px,3vw,32px)] font-extralight leading-[1.25] tracking-[-0.5px]">
+              Envie suas <span className="text-grad">cotações</span>
+            </h2>
+            <p className="mx-auto mt-2.5 text-[15px] font-light text-white/80">
+              Faça upload dos PDFs das cotações D&amp;O para a análise comparativa
+            </p>
 
-              {/* Drop Zone */}
-              <div
-                onClick={openFileDialog}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                className={`relative border-2 border-dashed rounded-2xl p-8 md:p-12 text-center cursor-pointer transition-all ${
-                  isDragging
-                    ? "border-primary bg-primary/10"
-                    : "border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5"
-                }`}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf"
-                  multiple
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
+            <div
+              onClick={openFileDialog}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`mt-[30px] cursor-pointer rounded-[18px] border-2 border-dashed px-6 py-11 transition-all ${
+                isDragging
+                  ? "border-[rgba(255,180,110,.55)] bg-[rgba(234,100,36,.06)]"
+                  : "border-[rgba(150,165,190,.25)] bg-white/[.03] hover:border-[rgba(255,180,110,.55)] hover:bg-[rgba(234,100,36,.06)]"
+              }`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf"
+                multiple
+                onChange={handleFileSelect}
+                className="hidden"
+              />
 
-                <motion.div
-                  animate={{ scale: isDragging ? 1.1 : 1 }}
-                  className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-primary/20 flex items-center justify-center"
-                >
-                  <Upload className="w-8 h-8 text-primary" />
-                </motion.div>
-
-                <p className="text-lg font-medium mb-2">
-                  Arraste e solte seus arquivos aqui
-                </p>
-                <p className="text-muted-foreground text-sm">
-                  ou clique para selecionar
-                </p>
-                <p className="text-muted-foreground/70 text-xs mt-2">
-                  PDF • Máx. 10MB por arquivo • Até {MAX_FILES} arquivos
-                </p>
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[rgba(234,100,36,.15)]">
+                <Upload className="h-7 w-7 text-turya-orange" />
               </div>
 
-              {/* File List */}
-              <AnimatePresence>
-                {files.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="mt-6 space-y-3"
-                  >
-                    <div className="flex items-center justify-between text-sm text-muted-foreground">
-                      <span>
-                        {files.length}{" "}
-                        {files.length === 1 ? "arquivo" : "arquivos"}{" "}
-                        selecionado{files.length !== 1 ? "s" : ""}
-                      </span>
+              <p className="mb-1.5 text-[17px] font-normal">Arraste e solte seus arquivos aqui</p>
+              <p className="text-[13px] text-white/68">ou clique para selecionar</p>
+              <p className="mt-2.5 text-[11.5px] text-white/45">
+                PDF · Máx. 10MB por arquivo · Até {MAX_FILES} arquivos
+              </p>
+            </div>
+
+            <AnimatePresence>
+              {files.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="mt-6 space-y-3 text-left"
+                >
+                  <div className="flex items-center justify-between text-sm text-white/68">
+                    <span>
+                      {files.length} {files.length === 1 ? "arquivo" : "arquivos"} selecionado
+                      {files.length !== 1 ? "s" : ""}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFiles([])}
+                      className="text-turya-orange hover:underline"
+                    >
+                      Remover todos
+                    </button>
+                  </div>
+
+                  {files.map((file, index) => (
+                    <motion.div
+                      key={`${file.name}-${index}`}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 20 }}
+                      className="flex items-center gap-3 rounded-xl border border-[rgba(255,180,110,.16)] bg-white/[.04] p-3"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[rgba(234,100,36,.15)]">
+                        <FileText className="h-5 w-5 text-turya-orange" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{file.name}</p>
+                        <p className="text-xs text-white/68">{formatFileSize(file.size)}</p>
+                      </div>
                       <button
                         type="button"
-                        onClick={() => setFiles([])}
-                        className="text-destructive hover:underline"
+                        onClick={() => removeFile(index)}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-white/68 transition-colors hover:bg-[rgba(234,100,36,.2)] hover:text-turya-orange"
                       >
-                        Remover todos
+                        <X className="h-4 w-4" />
                       </button>
-                    </div>
+                    </motion.div>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-                    {files.map((file, index) => (
-                      <motion.div
-                        key={`${file.name}-${index}`}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 20 }}
-                        className="flex items-center gap-3 p-3 rounded-xl bg-muted/50"
-                      >
-                        <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
-                          <FileText className="w-5 h-5 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{file.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatFileSize(file.size)}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeFile(index)}
-                          className="w-8 h-8 rounded-lg hover:bg-destructive/20 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </motion.div>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Error Message */}
-              <AnimatePresence>
-                {error && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="mt-4 p-3 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center gap-2 text-destructive"
-                  >
-                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                    <span className="text-sm">{error}</span>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Submit Button */}
-              <div className="mt-8">
-                <Button
-                  type="submit"
-                  size="lg"
-                  disabled={files.length === 0 || isSubmitting || isWaitingTerms}
-                  className="w-full gap-2"
+            <AnimatePresence>
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="mt-4 flex items-center gap-2 rounded-xl border border-[rgba(234,100,36,.35)] bg-[rgba(234,100,36,.1)] p-3 text-turya-gold"
                 >
-                  {isWaitingTerms ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Confirmando termos...
-                    </>
-                  ) : isSubmitting ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Enviando...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="w-5 h-5" />
-                      Analisar Cotações
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </form>
-        </motion.div>
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span className="text-sm">{error}</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <button
+              type="submit"
+              disabled={files.length === 0 || isSubmitting || isWaitingTerms}
+              className="btn-solid"
+            >
+              {isWaitingTerms ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Confirmando termos...
+                </>
+              ) : isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Enviando...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  Analisar Cotações
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       </div>
     </section>
   );

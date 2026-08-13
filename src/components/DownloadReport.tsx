@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import styles from "./DownloadReport.module.css";
-import turyaLogo from "@/assets/turya-logo.png";
+import Header from "@/components/Header";
 import { useAnalysisFlow } from "@/hooks/useAnalysisFlow";
+import { cn } from "@/lib/utils";
 
 interface DownloadResult {
   downloadUrl?: string;
@@ -19,13 +19,10 @@ const DownloadReport = () => {
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [secondaryDownloadUrl, setSecondaryDownloadUrl] = useState<string | null>(null);
 
-  // Documento principal = Word (.docx) quando disponível; senão HTML; senão a planilha.
   const primaryIsDocx = !!(docxBlob && docxBlob.size > 0);
   const primaryIsHtml = !primaryIsDocx && !!(htmlBlob && htmlBlob.size > 0);
   const primaryIsSheet =
-    !primaryIsDocx &&
-    !primaryIsHtml &&
-    !!(secondaryFileBlob && secondaryFileBlob.size > 0);
+    !primaryIsDocx && !primaryIsHtml && !!(secondaryFileBlob && secondaryFileBlob.size > 0);
   const primaryDownloadName = primaryIsDocx
     ? docxFileName
     : primaryIsSheet
@@ -66,7 +63,6 @@ const DownloadReport = () => {
   }, [htmlBlob, docxBlob, secondaryFileBlob, primaryIsDocx, primaryIsHtml, primaryIsSheet]);
 
   useEffect(() => {
-    // Se a planilha já é o download principal, não duplicar no botão secundário.
     if (primaryIsSheet) {
       setSecondaryDownloadUrl(null);
       return;
@@ -124,154 +120,115 @@ const DownloadReport = () => {
   const secondaryHref = secondaryDownloadUrl ?? "#";
   const hasSecondaryFile = !!secondaryDownloadUrl && secondaryDownloadUrl !== "#";
 
+  const primaryLabel = primaryIsDocx
+    ? "Baixar proposta (Word)"
+    : primaryIsSheet
+      ? "Baixar Análise XLSX"
+      : "Baixar relatório";
+
   return (
-    <div className={styles.wrapper}>
-      <div className={styles.noise} aria-hidden />
-      <div className={styles.brandWrap}>
-        <img
-          src={turyaLogo}
-          alt="Turya - Inteligência Artificial"
-          className={styles.brandLogo}
-        />
-      </div>
+    <div className="relative min-h-screen overflow-hidden bg-[#070410] text-white">
+      <Header variant="brand" />
 
-      <div className={styles.scene}>
-        <div className={styles.centerLine} />
-
-        <div className={styles.colLeft}>
-          <div className={styles.bgNumber}>D&amp;O</div>
-
-          <div className={styles.tag}>Relatório concluído</div>
-
-          <h1 className={styles.headline}>
+      <div className="mx-auto grid min-h-screen max-w-[1180px] items-center gap-12 px-6 pb-16 pt-28 md:grid-cols-2 md:gap-16 md:px-10">
+        <div>
+          <div className="eyebrow-turya mb-6">relatório concluído</div>
+          <h1 className="text-[clamp(36px,5.4vw,58px)] font-extralight leading-[1.2] tracking-[-0.5px]">
             Pronto
             <br />
-            <span>para decidir.</span>
+            <span className="text-grad">para decidir.</span>
           </h1>
-
-          <div className={styles.divider} />
-
-          <p className={styles.body}>
+          <p className="mt-6 max-w-md text-[16px] font-light text-white/88">
             {primaryIsDocx
               ? "A proposta comercial das suas cotações D\u0026O está gerada em Word."
               : primaryIsSheet
                 ? "A análise em planilha das suas cotações D\u0026O está pronta."
-                : "O relatório comparativo das suas cotações D\u0026O está gerado."}
-            <br />
-            <em>Abra o arquivo e tome sua decisão com clareza.</em>
+                : "O relatório comparativo das suas cotações D\u0026O está gerado."}{" "}
+            <em className="text-white/68">Abra o arquivo e tome sua decisão com clareza.</em>
           </p>
 
-          <div className={styles.btns}>
+          <div className="mt-10 flex flex-col items-start gap-4">
             <a
               id="btnDownload"
-              className={styles.btnDl}
+              className="btn-cta-box"
               href={href}
               target={isValidUrl && !isBlobUrl ? "_blank" : undefined}
               rel={isValidUrl && !isBlobUrl ? "noreferrer" : undefined}
               download={isValidUrl ? primaryDownloadName : undefined}
               onClick={handleDownload}
             >
-              {primaryIsDocx
-                ? "Baixar proposta (Word)"
-                : primaryIsSheet
-                  ? "Baixar Análise XLSX"
-                  : "Baixar relatório"}
-              <svg className={styles.btnDlIcon} viewBox="0 0 24 24">
-                <path d="M12 15V3M12 15l-4-4M12 15l4-4M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17" />
-              </svg>
+              <span className="btn-cta">{primaryLabel}</span>
             </a>
 
             {!primaryIsSheet && (
               <>
                 <a
                   id="btnDownloadSecondary"
-                  className={`${styles.btnNew} ${!hasSecondaryFile ? styles.btnDisabled : ""}`}
                   href={secondaryHref}
                   download={secondaryFileName}
                   onClick={handleSecondaryDownload}
                   aria-disabled={!hasSecondaryFile}
+                  className={cn(
+                    "text-[13px] tracking-widest text-turya-gold no-underline transition-colors hover:text-white",
+                    !hasSecondaryFile && "pointer-events-none opacity-40"
+                  )}
                 >
-                  <svg className={styles.btnNewIcon} viewBox="0 0 24 24">
-                    <path d="M12 15V3M12 15l-4-4M12 15l4-4M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17" />
-                  </svg>
-                  Baixar Análise XLSX
+                  Baixar Análise XLSX →
                 </a>
-                <p className={styles.xlsxHint}>
-                  Este arquivo XLSX é editável e contém a base da análise. Para
-                  visualizar insights valiosos da cotação e tecnologias acopladas
-                  como deep research, baixe a análise principal.
+                <p className="max-w-md text-[12.5px] leading-relaxed text-white/68">
+                  Este arquivo XLSX é editável e contém a base da análise. Para visualizar insights
+                  valiosos da cotação e tecnologias acopladas como deep research, baixe a análise
+                  principal.
                 </p>
               </>
             )}
 
-            <a href="#" className={styles.btnNew} onClick={handleNewQuotes}>
-              <svg className={styles.btnNewIcon} viewBox="0 0 24 24">
-                <path d="M4 4v5h5M20 20v-5h-5M4 9a9 9 0 0114.93-3.36M20 15A9 9 0 015.07 18.36" />
-              </svg>
-              Enviar novas cotações
+            <a
+              href="#"
+              onClick={handleNewQuotes}
+              className="text-[13px] tracking-widest text-white/68 no-underline transition-colors hover:text-turya-gold"
+            >
+              enviar novas cotações →
             </a>
           </div>
         </div>
 
-        <div className={styles.colRight}>
-          <div className={styles.composition}>
-            <div className={styles.floatNum}>01</div>
-
-            <div className={`${styles.sheet} ${styles.s3}`} />
-            <div className={`${styles.sheet} ${styles.s2}`} />
-
-            <div className={`${styles.sheet} ${styles.s1}`}>
-              <div className={styles.docHead}>
-                <div>
-                  <div className={styles.docCo}>Turya Intelligence</div>
-                  <div className={styles.docTitle}>Análise Comparativa D&amp;O</div>
-                </div>
-                <div className={styles.docSeal}>
-                  <svg className={styles.docSealIcon} viewBox="0 0 24 24">
-                    <polyline points="4 12 9 17 20 7" />
-                  </svg>
-                </div>
-              </div>
-
-              <div className={styles.docBody}>
-                <div className={styles.docSection}>
-                  <div className={styles.docSectionTitle}>Coberturas</div>
-                  <div className={styles.docLines}>
-                    <div className={`${styles.ln} ${styles.lnDone} ${styles.w100}`} />
-                    <div className={`${styles.ln} ${styles.lnDone} ${styles.w85}`} />
-                    <div className={`${styles.ln} ${styles.lnDone} ${styles.w70}`} />
-                    <div className={`${styles.ln} ${styles.lnDone} ${styles.w90}`} />
-                  </div>
-                </div>
-
-                <div className={styles.docSection}>
-                  <div className={styles.docSectionTitle}>Franquias &amp; Sublimites</div>
-                  <div className={styles.docLines}>
-                    <div className={`${styles.ln} ${styles.lnDone} ${styles.w100}`} />
-                    <div className={`${styles.ln} ${styles.lnDone} ${styles.w55}`} />
-                    <div className={`${styles.ln} ${styles.lnDone} ${styles.w85}`} />
-                  </div>
-                </div>
-
-                <div className={styles.docSection}>
-                  <div className={styles.docSectionTitle}>Condições Especiais</div>
-                  <div className={styles.docLines}>
-                    <div className={`${styles.ln} ${styles.lnDone} ${styles.w100}`} />
-                    <div className={`${styles.ln} ${styles.lnDone} ${styles.w70}`} />
-                    <div className={`${styles.ln} ${styles.lnPlain} ${styles.w40}`} />
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.docSign}>
-                <div className={styles.signLeft}>{primaryDownloadName}</div>
-                <div className={styles.signStamp}>Verificado · Turya</div>
-              </div>
-
-              <div className={styles.fold} />
+        <div
+          className="relative rounded-[22px] border border-[rgba(255,180,110,.16)] bg-gradient-to-b from-[rgba(24,16,34,.85)] to-[rgba(12,8,20,.85)] p-6 shadow-[0_30px_80px_rgba(0,0,0,.5),0_0_50px_rgba(234,100,36,.08)]"
+          aria-hidden
+        >
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <div className="text-[11px] tracking-[2px] text-white/68">Turya Intelligence</div>
+              <div className="mt-1 text-[15px] font-extrabold">Análise Comparativa D&amp;O</div>
             </div>
-
-            <div className={styles.compShadow} />
+            <span className="flex h-9 w-9 items-center justify-center rounded-full border border-[rgba(124,217,146,.4)] bg-[rgba(124,217,146,.12)] text-[#7CD992]">
+              ✓
+            </span>
+          </div>
+          <div className="space-y-5">
+            {[
+              { title: "Coberturas", widths: ["100%", "85%", "70%", "90%"] },
+              { title: "Franquias & Sublimites", widths: ["100%", "55%", "85%"] },
+              { title: "Condições Especiais", widths: ["100%", "70%", "40%"] },
+            ].map((section) => (
+              <div key={section.title}>
+                <div className="mb-2 text-[11px] tracking-[2px] text-turya-gold">{section.title}</div>
+                <div className="space-y-2">
+                  {section.widths.map((w, i) => (
+                    <div
+                      key={`${section.title}-${i}`}
+                      className="h-1.5 rounded-full bg-[rgba(234,100,36,.35)]"
+                      style={{ width: w }}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-6 flex items-center justify-between border-t border-[rgba(255,180,110,.16)] pt-4 text-[11.5px] text-white/68">
+            <span className="truncate pr-4">{primaryDownloadName}</span>
+            <span className="shrink-0 text-turya-gold">Verificado · Turya</span>
           </div>
         </div>
       </div>
