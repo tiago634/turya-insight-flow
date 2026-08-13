@@ -9,6 +9,12 @@ import {
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  TIMEOUT_MS,
+  WEBHOOK_INPUT_URL,
+  WEBHOOK_OUTPUT_URL,
+} from "@/lib/turya/config";
+import { buildAnalysisFormData, sendDocumentsToN8n } from "@/lib/turya/api";
 
 interface UploadZoneProps {
   onSuccess: (htmlBlob: Blob) => void;
@@ -23,13 +29,6 @@ interface UploadZoneProps {
 const MAX_FILES = 10;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_TYPES = ["application/pdf"];
-// URL do servidor webhook (Railway) - usa proxy para evitar CORS
-const WEBHOOK_SERVER_URL = import.meta.env.VITE_WEBHOOK_SERVER_URL || "http://localhost:3001";
-// Endpoint proxy para enviar documentos ao n8n (via servidor webhook)
-const WEBHOOK_INPUT_URL = `${WEBHOOK_SERVER_URL}/api/send-to-n8n`;
-// URL do servidor para receber webhook de saída (se usar fluxo assíncrono)
-const WEBHOOK_OUTPUT_URL = `${WEBHOOK_SERVER_URL}/webhook/result`;
-const TIMEOUT_MS = 10 * 60 * 1000; // 10 minutos (n8n pode demorar para processar)
 
 const UploadZone = ({
   onSuccess,
@@ -147,20 +146,7 @@ const UploadZone = ({
 
     // Gerar session_id único para esta análise
     const newSessionId = crypto.randomUUID();
-    const formData = new FormData();
-
-    // Adicionar arquivos
-    files.forEach((file, index) => {
-      formData.append(`arquivo_${index}`, file);
-    });
-
-    // Adicionar metadados
-    formData.append("session_id", newSessionId);
-    formData.append("timestamp", new Date().toISOString());
-    formData.append("quantidade_arquivos", files.length.toString());
-    
-    // URL do webhook de saída (onde o n8n enviará o resultado - se usar fluxo assíncrono)
-    formData.append("webhook_output_url", WEBHOOK_OUTPUT_URL);
+    const formData = buildAnalysisFormData(files, newSessionId);
 
     console.log(">>> ENVIANDO PARA N8N (WEBHOOK DE ENTRADA) <<<");
     console.log("Session ID:", newSessionId);
@@ -183,12 +169,7 @@ const UploadZone = ({
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-      // Enviar para webhook de ENTRADA do n8n (não esperamos resposta síncrona)
-      const response = await fetch(WEBHOOK_INPUT_URL, {
-        method: "POST",
-        body: formData,
-        signal: controller.signal,
-      });
+      const response = await sendDocumentsToN8n(formData, controller.signal);
 
       clearTimeout(timeoutId);
 
