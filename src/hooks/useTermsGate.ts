@@ -1,6 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { createContext, createElement, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
-export function useTermsGate() {
+type TermsGateValue = ReturnType<typeof useTermsGateState>;
+
+const TermsGateContext = createContext<TermsGateValue | null>(null);
+
+function useTermsGateState() {
   // Termos: mostram apenas na primeira tentativa desta sessão (e re-aparecem após refresh).
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
@@ -50,4 +54,17 @@ export function useTermsGate() {
     handleCancelTerms,
     handleOpenTermsFromFooter,
   };
+}
+
+export function TermsGateProvider({ children }: { children: ReactNode }) {
+  const value = useTermsGateState();
+  return createElement(TermsGateContext.Provider, { value }, children);
+}
+
+export function useTermsGate() {
+  const ctx = useContext(TermsGateContext);
+  if (!ctx) {
+    throw new Error("useTermsGate must be used within TermsGateProvider");
+  }
+  return ctx;
 }

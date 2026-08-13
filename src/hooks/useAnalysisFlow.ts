@@ -1,21 +1,30 @@
-import { useEffect, useRef, useState } from "react";
+import { createContext, createElement, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   MAX_POLLING_TIME,
   POLLING_INTERVAL,
   SECONDARY_FOLLOWUP_MAX_MS,
   SECONDARY_FOLLOWUP_MS,
   STATUS_CHECK_URL,
+  TIMEOUT_MS,
+  WEBHOOK_INPUT_URL,
+  WEBHOOK_OUTPUT_URL,
 } from "@/lib/turya/config";
 import {
+  buildAnalysisFormData,
   fetchAnalysisStatus,
   isTuryaDiagEnabled,
   logTuryaPollingDiagnostics,
+  sendDocumentsToN8n,
 } from "@/lib/turya/api";
 import { base64ToBlob, extractSecondarySpreadsheet } from "@/lib/turya/decode";
 
 export type AppState = "upload" | "processing" | "completed" | "error";
 
-export function useAnalysisFlow() {
+type AnalysisFlowValue = ReturnType<typeof useAnalysisFlowState>;
+
+const AnalysisFlowContext = createContext<AnalysisFlowValue | null>(null);
+
+function useAnalysisFlowState() {
   const [appState, setAppState] = useState<AppState>("upload");
   const [htmlBlob, setHtmlBlob] = useState<Blob | null>(null);
   const [docxBlob, setDocxBlob] = useState<Blob | null>(null);
@@ -264,6 +273,106 @@ export function useAnalysisFlow() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const submitDocuments = (files: File[]) => {
+    // Gerar session_id único para esta análise
+    const newSessionId = crypto.randomUUID();
+    const formData = buildAnalysisFormData(files, newSessionId);
+
+    console.log(">>> ENVIANDO PARA N8N (WEBHOOK DE ENTRADA) <<<");
+    console.log("Session ID:", newSessionId);
+    console.log("Webhook de entrada:", WEBHOOK_INPUT_URL);
+    console.log("Webhook de saída:", WEBHOOK_OUTPUT_URL);
+
+    localStorage.setItem(
+      "turya_analysis",
+      JSON.stringify({ sessionId: newSessionId, startedAt: new Date().toISOString() })
+    );
+
+    // INICIAR LOADING IMEDIATAMENTE (sem esperar resposta)
+    handleStartProcessing(newSessionId);
+
+    // Processar resposta em background (não bloqueia a UI)
+    (async () => {
+      try {
+      // Criar AbortController para timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      const response = await sendDocumentsToN8n(formData, controller.signal);
+
+      clearTimeout(timeoutId);
+
+      console.log("Resposta do webhook de entrada:", response.status);
+      const contentType = response.headers.get("content-type") || "";
+      console.log("Content-Type:", contentType);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Erro ao processar documentos: ${response.status} - ${errorText}`);
+      }
+
+      // Verificar se a resposta é HTML (resposta síncrona direta do n8n)
+      if (contentType.includes("text/html") || contentType.includes("application/octet-stream")) {
+        console.log("Recebendo resposta HTML direta do n8n");
+
+        // Receber o HTML como blob
+        const blob = await response.blob();
+        console.log("Blob recebido:", blob.size, "bytes, tipo:", blob.type);
+
+        if (blob.size === 0) {
+          throw new Error("Resposta vazia do servidor");
+        }
+
+        // Sucesso - enviar blob diretamente para o componente pai
+        handleSuccess(blob);
+        return;
+      }
+
+      // Se não for HTML, assumir que é JSON (resposta assíncrona)
+      try {
+        const result = await response.json();
+        console.log("Resposta JSON recebida:", result);
+
+        // Se a resposta indica sucesso (processamento iniciado em background)
+        // O loading já foi iniciado acima, então apenas continuar (polling já está ativo)
+        if (result.success || result.message) {
+          console.log("✅ Processamento iniciado. Aguardando resultado via polling...");
+          // Não fazer nada - o polling no Index.tsx já está ativo e vai buscar o resultado
+          return;
+        }
+
+        // Se não reconhecer o formato, continuar com polling mesmo assim
+        console.log("⚠️ Formato de resposta não reconhecido, mas continuando com polling...");
+        // O polling no Index já está ativo, então não fazer nada
+      } catch (jsonError) {
+        // Se não conseguir fazer parse como JSON, pode ser que seja HTML mesmo
+        console.warn("Não foi possível fazer parse como JSON, tentando como HTML...");
+        const blob = await response.blob();
+        if (blob.size > 0) {
+          handleSuccess(blob);
+          return;
+        }
+        throw jsonError;
+      }
+
+    } catch (err: unknown) {
+      console.error("Erro ao processar resposta:", err);
+
+      let message = "Erro ao processar análise";
+
+      if (err instanceof Error) {
+        if (err.name === "AbortError") {
+          message = "Tempo limite excedido. Por favor, tente novamente.";
+        } else {
+          message = err.message;
+        }
+      }
+
+      handleError(message);
+    }
+    })(); // Executar função assíncrona em background
+  };
+
   const handleReset = () => {
     // Parar polling se estiver ativo
     if (pollingIntervalRef.current) {
@@ -299,5 +408,19 @@ export function useAnalysisFlow() {
     handleSuccess,
     handleError,
     handleReset,
+    submitDocuments,
   };
+}
+
+export function AnalysisFlowProvider({ children }: { children: ReactNode }) {
+  const value = useAnalysisFlowState();
+  return createElement(AnalysisFlowContext.Provider, { value }, children);
+}
+
+export function useAnalysisFlow() {
+  const ctx = useContext(AnalysisFlowContext);
+  if (!ctx) {
+    throw new Error("useAnalysisFlow must be used within AnalysisFlowProvider");
+  }
+  return ctx;
 }

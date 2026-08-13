@@ -1,13 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import styles from "./TermsOfUseModal.module.css";
+import { useTermsGate } from "@/hooks/useTermsGate";
 
-interface TermsOfUseModalProps {
-  open: boolean;
-  onAccept: () => void;
-  onCancel: () => void;
-}
-
-const TermsOfUseModal = ({ open, onAccept, onCancel }: TermsOfUseModalProps) => {
+const TermsOfUseModal = () => {
+  const { termsOpen: open, handleAcceptTerms: onAccept, handleCancelTerms: onCancel } = useTermsGate();
   const [checked, setChecked] = useState(false);
   const [hideScrollHint, setHideScrollHint] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);

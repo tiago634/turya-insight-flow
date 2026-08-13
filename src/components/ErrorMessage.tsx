@@ -1,13 +1,10 @@
 import { motion } from "framer-motion";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAnalysisFlow } from "@/hooks/useAnalysisFlow";
 
-interface ErrorMessageProps {
-  message: string;
-  onRetry: () => void;
-}
-
-const ErrorMessage = ({ message, onRetry }: ErrorMessageProps) => {
+const ErrorMessage = () => {
+  const { errorMessage: message, handleReset: onRetry } = useAnalysisFlow();
   return (
     <section className="py-16">
       <div className="container mx-auto px-6">

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import styles from "./LoadingAnalysis.module.css";
 import turyaLogo from "@/assets/turya-logo.png";
+import { useAnalysisFlow } from "@/hooks/useAnalysisFlow";
 
 const CLAUSES = [
   "Cláusula 3.1: Cobertura Principal",
@@ -11,12 +12,8 @@ const CLAUSES = [
   "Cláusula 8.4: Condições Especiais",
 ];
 
-interface LoadingAnalysisProps {
-  sessionId: string;
-  statusCheckUrl?: string;
-}
-
-const LoadingAnalysis = ({ sessionId, statusCheckUrl }: LoadingAnalysisProps) => {
+const LoadingAnalysis = () => {
+  const { sessionId } = useAnalysisFlow();
   const [clauseIndex, setClauseIndex] = useState(0);
   const [clauseVisible, setClauseVisible] = useState(true);
   const [elapsedSecs, setElapsedSecs] = useState(0);

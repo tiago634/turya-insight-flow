@@ -1,31 +1,21 @@
 import { useEffect, useState } from "react";
 import styles from "./DownloadReport.module.css";
 import turyaLogo from "@/assets/turya-logo.png";
+import { useAnalysisFlow } from "@/hooks/useAnalysisFlow";
 
 interface DownloadResult {
   downloadUrl?: string;
 }
 
-interface DownloadReportProps {
-  onReset: () => void;
-  /** Quando o relatório vem do polling (backend), o Index passa o Blob. Senão usa localStorage/query. */
-  htmlBlob?: Blob | null;
-  /** Documento principal em Word (.docx), quando o fluxo entrega proposta em Word. */
-  docxBlob?: Blob | null;
-  docxFileName?: string;
-  /** Arquivo complementar opcional (ex: Analise_Turya_XLSX) */
-  secondaryFileBlob?: Blob | null;
-  secondaryFileName?: string;
-}
-
-const DownloadReport = ({
-  onReset,
-  htmlBlob,
-  docxBlob,
-  docxFileName = "Proposta_Comercial.docx",
-  secondaryFileBlob,
-  secondaryFileName = "Analise_Turya_XLSX",
-}: DownloadReportProps) => {
+const DownloadReport = () => {
+  const {
+    htmlBlob,
+    docxBlob,
+    docxFileName = "Proposta_Comercial.docx",
+    secondaryFileBlob,
+    secondaryFileName = "Analise_Turya_XLSX",
+    handleReset: onReset,
+  } = useAnalysisFlow();
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [secondaryDownloadUrl, setSecondaryDownloadUrl] = useState<string | null>(null);
 

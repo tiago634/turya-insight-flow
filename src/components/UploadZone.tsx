@@ -9,35 +9,16 @@ import {
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  TIMEOUT_MS,
-  WEBHOOK_INPUT_URL,
-  WEBHOOK_OUTPUT_URL,
-} from "@/lib/turya/config";
-import { buildAnalysisFormData, sendDocumentsToN8n } from "@/lib/turya/api";
-
-interface UploadZoneProps {
-  onSuccess: (htmlBlob: Blob) => void;
-  onError: (message: string) => void;
-  onStartProcessing: (sessionId: string) => void;
-  sessionId: string | null;
-  /** Controle de aceite dos Termos: deve ocorrer apenas na primeira tentativa desta sessão */
-  termsAccepted: boolean;
-  onRequestTerms: () => Promise<boolean>;
-}
+import { useAnalysisFlow } from "@/hooks/useAnalysisFlow";
+import { useTermsGate } from "@/hooks/useTermsGate";
 
 const MAX_FILES = 10;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_TYPES = ["application/pdf"];
 
-const UploadZone = ({
-  onSuccess,
-  onError,
-  onStartProcessing,
-  sessionId,
-  termsAccepted,
-  onRequestTerms,
-}: UploadZoneProps) => {
+const UploadZone = () => {
+  const { submitDocuments } = useAnalysisFlow();
+  const { termsAccepted, requestTermsAcceptance } = useTermsGate();
   const [files, setFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -135,7 +116,7 @@ const UploadZone = ({
     if (!termsAccepted) {
       try {
         setIsWaitingTerms(true);
-        const ok = await onRequestTerms();
+        const ok = await requestTermsAcceptance();
         if (!ok) return;
       } finally {
         setIsWaitingTerms(false);
@@ -143,105 +124,8 @@ const UploadZone = ({
     }
 
     setIsSubmitting(true);
-
-    // Gerar session_id único para esta análise
-    const newSessionId = crypto.randomUUID();
-    const formData = buildAnalysisFormData(files, newSessionId);
-
-    console.log(">>> ENVIANDO PARA N8N (WEBHOOK DE ENTRADA) <<<");
-    console.log("Session ID:", newSessionId);
-    console.log("Webhook de entrada:", WEBHOOK_INPUT_URL);
-    console.log("Webhook de saída:", WEBHOOK_OUTPUT_URL);
-
-    localStorage.setItem(
-      "turya_analysis",
-      JSON.stringify({ sessionId: newSessionId, startedAt: new Date().toISOString() })
-    );
-
-    // INICIAR LOADING IMEDIATAMENTE (sem esperar resposta)
-    onStartProcessing(newSessionId);
+    submitDocuments(files);
     setIsSubmitting(false);
-
-    // Processar resposta em background (não bloqueia a UI)
-    (async () => {
-      try {
-      // Criar AbortController para timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-      const response = await sendDocumentsToN8n(formData, controller.signal);
-
-      clearTimeout(timeoutId);
-
-      console.log("Resposta do webhook de entrada:", response.status);
-      const contentType = response.headers.get("content-type") || "";
-      console.log("Content-Type:", contentType);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erro ao processar documentos: ${response.status} - ${errorText}`);
-      }
-
-      // Verificar se a resposta é HTML (resposta síncrona direta do n8n)
-      if (contentType.includes("text/html") || contentType.includes("application/octet-stream")) {
-        console.log("Recebendo resposta HTML direta do n8n");
-        
-        // Receber o HTML como blob
-        const blob = await response.blob();
-        console.log("Blob recebido:", blob.size, "bytes, tipo:", blob.type);
-
-        if (blob.size === 0) {
-          throw new Error("Resposta vazia do servidor");
-        }
-
-        // Sucesso - enviar blob diretamente para o componente pai
-        onSuccess(blob);
-        return;
-      }
-
-      // Se não for HTML, assumir que é JSON (resposta assíncrona)
-      try {
-        const result = await response.json();
-        console.log("Resposta JSON recebida:", result);
-
-        // Se a resposta indica sucesso (processamento iniciado em background)
-        // O loading já foi iniciado acima, então apenas continuar (polling já está ativo)
-        if (result.success || result.message) {
-          console.log("✅ Processamento iniciado. Aguardando resultado via polling...");
-          // Não fazer nada - o polling no Index.tsx já está ativo e vai buscar o resultado
-          return;
-        }
-        
-        // Se não reconhecer o formato, continuar com polling mesmo assim
-        console.log("⚠️ Formato de resposta não reconhecido, mas continuando com polling...");
-        // O polling no Index já está ativo, então não fazer nada
-      } catch (jsonError) {
-        // Se não conseguir fazer parse como JSON, pode ser que seja HTML mesmo
-        console.warn("Não foi possível fazer parse como JSON, tentando como HTML...");
-        const blob = await response.blob();
-        if (blob.size > 0) {
-          onSuccess(blob);
-          return;
-        }
-        throw jsonError;
-      }
-      
-    } catch (err: unknown) {
-      console.error("Erro ao processar resposta:", err);
-      
-      let message = "Erro ao processar análise";
-      
-      if (err instanceof Error) {
-        if (err.name === "AbortError") {
-          message = "Tempo limite excedido. Por favor, tente novamente.";
-        } else {
-          message = err.message;
-        }
-      }
-      
-      onError(message);
-    }
-    })(); // Executar função assíncrona em background
   };
 
   const formatFileSize = (bytes: number) => {
